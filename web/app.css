@@ -24,3 +24,5 @@ dialog{border:1px solid var(--line);border-radius:18px;padding:0;color:var(--ink
 
 .connection-address { overflow-wrap: anywhere; }
 .confirm-body > p { white-space: pre-line; overflow-wrap: anywhere; }
+
+.form-field output{display:flex;align-items:center;min-height:42px;padding:10px 13px;border:1px solid var(--line);border-radius:8px;background:var(--green-light);color:var(--green);font-size:15px;font-weight:600}.form-grid>.full{grid-column:1/-1}.cost-summary{padding:13px 15px;border-radius:8px;background:var(--green-light);color:var(--green);font-size:12px;line-height:1.8}.form-field [data-legacy-cost]{line-height:1.8}.form-field [data-clear-cost]{font-size:10px;margin-left:6px}

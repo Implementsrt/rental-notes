@@ -103,6 +103,51 @@ class APITests(unittest.TestCase):
             with self.subTest(check=key):
                 self.assertEqual(self.put(home=home).status_code,400)
 
+    def test_rental_terms_and_individual_appliances_survive_sync_and_recalculate_amounts(self):
+        self.home.update(depositMonths=3, paymentMonths=2, agencyRate=0.5)
+        self.home['costs'].update(rent=2601, deposit=1, agency=1, parking=300, cleanOut=200)
+        for key, status in [('fridge', 'pass'), ('sterilizer', 'other'), ('range_hood', 'fail'), ('gas_water_heater', 'unknown')]:
+            self.home['checks'][key] = {'status': status, 'note': '分别核实'}
+        self.assertEqual(self.put().status_code, 201)
+        home = create_app(self.config).test_client().get('/api/homes', headers=self.headers).json['items'][0]['data']
+        for key in ['depositMonths', 'paymentMonths', 'agencyRate']:
+            self.assertEqual(home[key], self.home[key])
+        self.assertEqual(home['costs']['deposit'], 7803)
+        self.assertEqual(home['costs']['agency'], 1301)
+        for key in ['fridge', 'sterilizer', 'range_hood', 'gas_water_heater']:
+            self.assertEqual(home['checks'][key], self.home['checks'][key])
+        self.home.update(agencyRate=0)
+        self.home['costs']['rent'] = None
+        self.assertEqual(self.put(1).status_code, 200)
+        home = self.client.get('/api/homes', headers=self.headers).json['items'][0]['data']
+        self.assertIsNone(home['costs']['deposit'])
+        self.assertEqual(home['costs']['agency'], 0)
+
+    def test_legacy_amounts_and_combined_appliance_answer_are_preserved_without_new_defaults(self):
+        self.home['costs'].update(deposit=3900.5, agency=700.5, cleanIn=88.5, parking=None, cleanOut=None)
+        self.home['checks']['appliances'] = {'status': 'pass', 'note': '原有整体记录'}
+        self.assertEqual(self.put().status_code, 201)
+        home = self.client.get('/api/homes', headers=self.headers).json['items'][0]['data']
+        for key in ['depositMonths', 'paymentMonths', 'agencyRate']:
+            self.assertIsNone(home[key])
+        for key in ['deposit', 'agency', 'cleanIn', 'parking', 'cleanOut']:
+            self.assertEqual(home['costs'][key], self.home['costs'][key])
+        self.assertEqual(home['checks']['appliances'], self.home['checks']['appliances'])
+        for key in ['fridge', 'sterilizer', 'range_hood', 'gas_water_heater']:
+            self.assertNotIn(key, home['checks'])
+
+    def test_rental_term_options_reject_invalid_types_and_values(self):
+        for key in ['depositMonths', 'paymentMonths', 'agencyRate']:
+            for value in [True, False, '1', '', -1, 4, {}, [], float('nan')]:
+                with self.subTest(field=key, value=value):
+                    home = copy.deepcopy(self.home)
+                    home[key] = value
+                    self.assertEqual(self.put(home=home).status_code, 400)
+        for key in ['fridge', 'sterilizer', 'range_hood', 'gas_water_heater']:
+            home = copy.deepcopy(self.home)
+            home['checks'][key] = {'status': 'good', 'note': ''}
+            self.assertEqual(self.put(home=home).status_code, 400)
+
     def test_unapproved_origins_are_rejected_and_allowed_origin_gets_cors(self):
         result=self.client.get('/api/homes',headers={**self.headers,'Origin':'https://malicious.example'})
         self.assertEqual(result.status_code,403)

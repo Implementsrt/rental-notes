@@ -17,7 +17,10 @@ export const CHECKS = [
   ['utilities', '民用水电', 'hard', [1], '网上先问', '问清水电单价、独立计量方式、由谁收取，签约前核实账单。'],
   ['natural_gas', '已通天然气', 'hard', [1, 2], '网上先问', '确认是否已接通并可使用天然气，区分已开通、仅预留管道和瓶装气；到场后再核实。'],
   ['furniture', '床、空调、窗帘齐全', 'hard', [1], '网上先问', '确认属于随房配套；缺失的项目需要明确补齐日期。'],
-  ['appliances', '冰箱、热水器、油烟机齐全', 'hard', [1], '网上先问', '确认具体配置，洗衣机自带，不需要房东另外配。'],
+  ['fridge', '冰箱', 'hard', [1, 2], '网上先问', '确认冰箱随房提供；现场开机检查冷藏、冷冻效果、密封条及异味。'],
+  ['sterilizer', '消毒柜', 'hard', [1, 2], '网上先问', '确认消毒柜随房提供，核对消毒方式并按说明试运行，检查柜门和明显故障。'],
+  ['range_hood', '抽油烟机', 'hard', [1, 2], '网上先问', '确认抽油烟机随房提供；开机检查吸力、照明、异响及排烟管连接。'],
+  ['gas_water_heater', '天然气热水器', 'hard', [1, 2], '网上先问', '确认热水器使用天然气，检查排烟和通风条件；由房东演示点火及持续热水，勿自行拆装燃气设备。'],
   ['washer', '自带洗衣机可安装', 'hard', [1, 2], '网上先问', '核对机器与摆放位置尺寸，确认进水、排水、插座及搬入通道。'],
   ['agency', '中介费明确且可接受', 'hard', [1], '网上先问', '问清是否收费、金额、支付时间，以及有无额外服务费。没有预设必须为零。'],
   ['dry', '无漏水、发霉、明显返味', 'hard', [1, 2], '到场先查', '查看天花板、窗边、墙角、橱柜底和水槽下方；询问既往漏水和维修情况。'],
@@ -25,7 +28,7 @@ export const CHECKS = [
   ['toilet', '马桶使用正常', 'hard', [1, 2], '到场先查', '两卫都要逐一检查马桶；试冲水与补水，检查有无长流水、底座渗水及返味。'],
   ['drain', '排水通畅', 'hard', [1, 2], '到场先查', '水池、地漏放水，观察是否积水、排水缓慢或返味。'],
   ['signal', '手机信号与移动网络正常', 'hard', [1, 2], '到场先查', '关闭 Wi-Fi，在卧室、客厅、阳台测试通话、网页及视频，留意卡顿和掉信号。'],
-  ['working', '配套家电功能正常', 'hard', [2], '功能核实', '实际运行空调、冰箱、热水器和油烟机，检查效果、异响及明显故障。'],
+  ['working', '配套家电功能正常', 'hard', [2], '功能核实', '实际运行空调、冰箱、消毒柜、天然气热水器和抽油烟机，检查效果、异响及明显故障。'],
   ['condition', '家具家电新旧程度', 'soft', [2], '居住体验', '查看床架、床垫、窗帘及家电清洁、磨损情况。功能与新旧程度分开评估。'],
   ['ac_efficiency', '空调能耗等级', 'soft', [2], '居住体验', '查看空调能效标识，记录等级、型号和标注年份；多台空调分别确认，标识不清先留待核实。'],
   ['bedroom_door', '卧室门手感', 'soft', [2], '居住体验', '反复开关，检查是否卡顿、门体过轻，正常关门是否有明显砰响。'],
@@ -61,6 +64,15 @@ export const CHECKS = [
   ['handover', '交付承诺与交房记录', 'contract', [3], '交付与交接', '补齐、维修、保洁的项目和日期写入合同；交房时共同拍照、抄表、签设备及已有损坏清单。'],
 ].map(([id, label, kind, stages, group, how]) => ({ id, label, kind, stages: stages.includes(1) ? [1, 2] : stages, group, how }));
 
+// Keep the former combined answer in backups without treating it as four verified answers.
+export const LEGACY_CHECKS = [{id: 'appliances', label: '冰箱、热水器、油烟机齐全（旧记录）', kind: 'hard'}];
+export const DEFAULT_COMMUNITIES = ['恒大·悦龙台', '中铁·天地明珠', '启迪亮', '龙光玖珑台', '万科·金域滨江'];
+export const RENT_TERMS = {
+  depositMonths: {label: '押金', options: [[1, '押一'], [2, '押二'], [3, '押三']]},
+  paymentMonths: {label: '付费方式', options: [[1, '付一'], [2, '付二'], [3, '付三']]},
+  agencyRate: {label: '中介费', options: [[0, '无'], [0.5, '一半'], [1, '全额']]},
+};
+
 const ONLINE_GUIDANCE = {
   orientation: '查看户型图和实拍，询问主要卧室与客厅各自朝向、前方遮挡；到场再核实采光。',
   closed_kitchen: '看图片或视频确认厨房是否有完整隔断和门，看不清就请对方补充；现场核对实际格局。',
@@ -68,7 +80,10 @@ const ONLINE_GUIDANCE = {
   utilities: '先问水电单价、是否民用、是否独立计量和由谁收取，到场再核实账单。',
   natural_gas: '问清天然气是否已开通可用，区分仅预留管道和瓶装气，到场再次确认。',
   furniture: '请对方列明随房提供的床、空调和窗帘，缺失项目问清补齐日期，现场逐一核对。',
-  appliances: '询问冰箱、热水器和油烟机是否随房提供；洗衣机自带，到场再检查配套功能。',
+  fridge: '询问冰箱是否随房提供、冷藏冷冻是否正常，到场再开机检查。',
+  sterilizer: '询问有无消毒柜、是否正常使用，到场确认配置并试运行。',
+  range_hood: '询问抽油烟机是否随房提供、排烟是否正常，到场开机核实。',
+  gas_water_heater: '问清是否配天然气热水器、燃气是否开通，到场再核实排烟通风和热水情况。',
   washer: '先询问洗衣机位尺寸和进排水条件，现场再量尺寸、查插座及搬入通道。',
   agency: '问清中介费金额、支付时间及额外服务费，现场再次确认，签约时留书面约定。',
   dry: '询问有无漏水、发霉、返味及既往维修，照片与口头描述不能替代现场检查。',
@@ -92,7 +107,7 @@ export const COSTS = [
   // Retain legacy values in drafts and backups; self-managed broadband is not a housing cost option.
   { id: 'internet', label: '宽带费', unit: '元/月', monthly: true, hidden: true },
   { id: 'agency', label: '中介费', unit: '元，一次性' },
-  { id: 'cleanIn', label: '入住清洁费', unit: '元，一次性' },
+  { id: 'cleanIn', label: '入住清洁费', unit: '元，一次性', hidden: true },
   { id: 'cleanOut', label: '退租清洁费', unit: '元，一次性' },
   { id: 'deposit', label: '押金', unit: '元，可退金额另按合同' },
 ];

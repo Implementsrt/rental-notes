@@ -23,7 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / 'web'
 CHECK_KINDS = {
-    **dict.fromkeys(['orientation', 'closed_kitchen', 'balcony', 'utilities', 'natural_gas', 'furniture', 'appliances', 'washer', 'agency', 'dry', 'pressure', 'toilet', 'drain', 'signal', 'working'], 'hard'),
+    **dict.fromkeys(['orientation', 'closed_kitchen', 'balcony', 'utilities', 'natural_gas', 'furniture', 'appliances', 'fridge', 'sterilizer', 'range_hood', 'gas_water_heater', 'washer', 'agency', 'dry', 'pressure', 'toilet', 'drain', 'signal', 'working'], 'hard'),
     **dict.fromkeys(['condition', 'ac_efficiency', 'bedroom_door', 'entry_door', 'door_lock', 'soundproof', 'kitchen_space', 'double_sink', 'balcony_clear', 'balcony_privacy', 'street_noise', 'neighbor_noise', 'gate', 'floor', 'entrance_gates', 'traffic_separation', 'ebike_access', 'property_fee', 'parking_fee', 'parking_position'], 'soft'),
     **dict.fromkeys(['authority', 'all_fees', 'deposit_terms', 'early_exit', 'renewal', 'repair_duty', 'entry_notice', 'repair_plan', 'repair_clean', 'unusable', 'temporary_stay', 'repeated_repair', 'handover'], 'contract'),
 }
@@ -59,6 +59,11 @@ def validate_home(raw, home_id):
     home['propertyFeeBasis'] = raw.get('propertyFeeBasis', 'monthly')
     if home['propertyFeeBasis'] not in ['area', 'monthly']:
         raise ValueError('物业费单位不正确')
+    for key, allowed in [('depositMonths', [1, 2, 3]), ('paymentMonths', [1, 2, 3]), ('agencyRate', [0, 0.5, 1])]:
+        value = raw.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value not in allowed):
+            raise ValueError('押金、付费方式或中介费选项不正确')
+        home[key] = value
     if raw.get('decision') not in ['pending', 'shortlist', 'eliminated', 'chosen']:
         raise ValueError('房源状态不正确')
     home['decision'] = raw['decision']
@@ -69,9 +74,14 @@ def validate_home(raw, home_id):
     home['costs'] = {}
     for key in COST_IDS:
         value = costs.get(key)
-        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1e8):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= (3e8 if key == 'deposit' else 1e8)):
             raise ValueError('费用必须为空或非负金额')
         home['costs'][key] = value
+    rent = home['costs']['rent']
+    if home['depositMonths'] is not None:
+        home['costs']['deposit'] = None if rent is None else math.floor(rent * home['depositMonths'] + 0.5)
+    if home['agencyRate'] is not None:
+        home['costs']['agency'] = 0 if home['agencyRate'] == 0 else None if rent is None else math.floor(rent * home['agencyRate'] + 0.5)
     home['checks'] = {}
     for key, kind in CHECK_KINDS.items():
         if key not in checks:
