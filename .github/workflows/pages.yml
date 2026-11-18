@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -21,18 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Set optional HTTPS API address
-        env:
-          RENT_API_BASE: ${{ vars.RENT_API_BASE }}
+      - name: Keep Pages storage local to the browser
         run: |
           python - <<'PY'
-          import json, os
           from pathlib import Path
-          from urllib.parse import urlsplit
-          base = os.environ.get('RENT_API_BASE', '').strip().rstrip('/')
-          if base and (urlsplit(base).scheme != 'https' or not urlsplit(base).hostname):
-              raise SystemExit('RENT_API_BASE must be an HTTPS address')
-          Path('web/config.js').write_text('window.RENT_CONFIG = ' + json.dumps({'apiBase': base or None}) + ';\n')
+          Path('web/config.js').write_text('window.RENT_CONFIG = {"apiBase": null};\n')
           PY
       - name: Check publication contents
         run: python publication.py

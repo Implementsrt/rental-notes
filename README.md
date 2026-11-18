@@ -2,7 +2,9 @@
 
 网上筛房提示、现场验房与签约记录，以及2至4套房并排对比。适合个人使用，支持手机和电脑。
 
-[在线使用看房手记](https://implementsrt.github.io/rental-notes/)。当前在线版保存在各设备的浏览器中；从本机预览迁移已有记录，请先导出JSON备份，再到在线版导入。
+[在线使用看房手记](https://implementsrt.github.io/rental-notes/)。GitHub Pages持续保留，`main`维护浏览器本地工具版，房源保存在各设备的浏览器中，不连接云端服务器。
+
+导出记录：点击右上角“数据与同步 → 导出备份”，下载包含全部房源信息、费用、检查结果和备注的JSON文件。更换设备、浏览器、网址或迁移到未来服务器版时，再通过“导入备份”恢复；导入不静默覆盖已有记录。导出的个人房源文件请自行保存，不提交到源码仓库。
 
 ## 已包含
 
@@ -86,19 +88,13 @@ sudo journalctl -u rental-notes -n 50 --no-pager
 
 服务使用1个进程、2个线程。数据库启用WAL并为每次请求使用独立连接。数据保留在程序目录之外，更新安装不覆盖已有密码或数据库。
 
-## 3. GitHub Pages前端＋阿里云后端
+## 3. Pages与后续服务器分支
 
-前端web目录可以独立部署到Pages，已有.github/workflows/pages.yml。上传项目到自己的GitHub仓库，默认分支使用main，在Settings → Pages中选择GitHub Actions。首次上线不设API地址时仍能作为本地保存版使用。
+现有GitHub Pages继续作为本地小工具使用，不删除。`.github/workflows/pages.yml`仅从`main`发布`web/`，固定生成`apiBase: null`，不读取`RENT_API_BASE`等服务器地址变量。房源保存在浏览器中，手机和电脑之间通过JSON导出/导入迁移。
 
-在正式同步前完成：
+用户后续会自行新建分支开展服务器构建和部署，方案与实际服务器配置在该分支继续确认。当前仓库中的Flask/SQLite后端、安装脚本、systemd服务、备份及Nginx示例保留作为后续基础，不表示已部署或已配置公网访问。不要在维护`main`时启动服务器部署或修改现有Pages用途。
 
-1. 为阿里云API确定可公开访问的HTTPS地址。GitHub Pages的HTTPS页面无法直接连接普通HTTP API；自签名证书不适合作为常规浏览器访问方案。
-2. 参考deploy/nginx.example.conf添加独立站点。保留Gunicorn的回环监听，在/etc/rental-notes.env中设置RENT_TRUST_PROXY=1。证书申请、续期和安全组配置需按实际访问地址处理，本项目未自动执行。
-3. 在/etc/rental-notes.env中设置RENT_ALLOWED_ORIGINS=https://你的用户名.github.io。这里填前端的**源地址**，不包含仓库路径；多个源用英文逗号分隔。随后重启rental-notes服务。
-4. GitHub仓库Settings → Secrets and variables → Actions → Variables中添加RENT_API_BASE，值为HTTPS后端地址（不要以/api结尾）。重新运行Pages工作流。
-5. 在手机和电脑上打开同一Pages站点，分别登录“数据与同步”。数据保存在阿里云SQLite中，各浏览器另保留自己的草稿。登录凭据仅保留在当前标签页会话中。
-
-不同服务地址的数据分开存放。如从本地版换到云端版，先导出本地备份，再在云端版导入并登录同步。
+后续整站部署可由Nginx统一提供HTTPS入口，转发到仅监听回环地址的Gunicorn；服务器直接提供页面时，`/config.js`自动选择同源API。启用代理时需按实际环境配置`RENT_TRUST_PROXY`，保留已有无关服务。不同服务地址的数据分开存放，迁移前先导出本地JSON备份。
 
 中国内地公网Web服务的域名、证书及接入要求请参阅阿里云文档。Let's Encrypt目前支持IP地址证书，但证书约6天有效，需要可靠的自动续期，且证书不替代云平台接入要求。
 

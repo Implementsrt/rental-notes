@@ -30,7 +30,7 @@
 | `web/config.js` | 静态版API地址；默认`null`仅本机保存 |
 | `server.py` | Flask API、SQLite、鉴权、静态页面、密码与备份CLI |
 | `deploy/` | Ubuntu安装、systemd、备份、Nginx示例和Windows上传助手 |
-| `.github/workflows/pages.yml` | Pages发布；可使用`RENT_API_BASE`仓库变量 |
+| `.github/workflows/pages.yml` | 仅从main发布Pages，固定使用浏览器本地保存 |
 | `publication.py`、`package.py` | 公开文件清单、敏感内容检查与打包 |
 | `tests/` | 前端模型、API与发布检查测试 |
 
@@ -66,9 +66,11 @@ python package.py
 
 公开源码仓库为 https://github.com/Implementsrt/rental-notes 。GitHub Pages已配置为GitHub Actions发布，推送`main`会触发`.github/workflows/pages.yml`；网站地址为 https://implementsrt.github.io/rental-notes/ ，部署结果以仓库Actions记录为准。提交仅包含`publication.py`的公开清单，使用GitHub no-reply提交邮箱。
 
-当前Pages不设置`RENT_API_BASE`，为浏览器本机保存版，各设备数据独立。本机预览与Pages属于不同来源，已有房源需先导出JSON，再在Pages导入。没有实际连接阿里云服务器执行安装，也没有完成后端公网HTTPS/域名接入；新会话应检查实际环境，不能把安装脚本当成已部署事实。
+用户已确定：保留现有GitHub Pages，不删除站点；`main`作为浏览器本地工具维护，必须保留JSON导出/导入。Pages工作流固定生成`apiBase: null`，只允许从`main`发布，不读取服务器API地址变量。各设备数据独立，在右上角“数据与同步 → 导出备份”下载完整JSON；到另一设备或未来服务器版使用“导入备份”迁移，已有记录不静默覆盖。本机预览与Pages属于不同来源，迁移同样需先导出再导入。
 
-个人服务器配置及本次迁移的私有运行产物放在项目外的单独交接目录，不在公开源码或安装包中。后续根据用户要求继续开发或部署；纯静态本机保存模式已经可用。
+服务器构建与部署留待用户后续自行新建分支，再在该分支继续；本轮不创建服务器分支，不部署服务器。仓库现有后端与部署模板保留供后续使用，不代表已部署。没有实际连接阿里云服务器执行安装，也没有完成后端公网HTTPS/域名接入；后续部署应先核对实际服务器状态。
+
+个人服务器配置及本次迁移的私有运行产物放在项目外的单独交接目录，不在公开源码或安装包中。纯静态本机保存模式已经可用，后续开发遵循上述分支安排。
 
 ## 实现边界
 

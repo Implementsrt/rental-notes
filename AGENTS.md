@@ -2,6 +2,7 @@
 
 - Read `HANDOFF.md` and `README.md` before changing behavior. The UI and user-facing communication are Chinese.
 - This is a personal rental-viewing notebook. QQ/GPT integration is not implemented and is not part of the existing application.
+- Keep `main` and its existing GitHub Pages site as a browser-local tool with JSON export/import. Pages must not connect to a server API. The user will create a separate branch for future server build/deployment work; do not begin that work or remove Pages as part of maintaining `main`.
 - Use the existing dependency-free web frontend and Flask/SQLite backend. Node is for local model tests only; the Ubuntu runtime does not need Node or Docker.
 - Preserve browser drafts, JSON backup compatibility, optimistic concurrency and conflict copies. Never silently turn unknown/other answers into passes or failures.
 - Guide descriptions stay expanded. Check notes stay hidden until “其他” is selected. History suggestions come from the same check across recorded homes; filled text remains editable.
