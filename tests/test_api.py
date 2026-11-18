@@ -64,6 +64,7 @@ class APITests(unittest.TestCase):
     def test_community_and_other_notes_round_trip_for_every_check_kind(self):
         self.home['community']='花园小区'
         self.home['name']='3栋1203'
+        self.home['costs']['internet']=80
         keys = ['balcony','bedroom_door','entry_notice','natural_gas','balcony_privacy','parking_position','ac_efficiency','door_lock','entrance_gates','traffic_separation','ebike_access']
         for key in keys:
             self.home['checks'][key]={'status':'other','note':'约定后再确认'}
@@ -72,6 +73,7 @@ class APITests(unittest.TestCase):
         home=restarted.get('/api/homes',headers=self.headers).json['items'][0]['data']
         self.assertEqual(home['community'],'花园小区')
         self.assertEqual(home['name'],'3栋1203')
+        self.assertEqual(home['costs']['internet'],80)
         for key in keys:
             self.assertEqual(home['checks'][key],{'status':'other','note':'约定后再确认'})
 

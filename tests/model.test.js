@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHECKS } from '../web/checklist.js';
-import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML } from '../web/model.js';
+import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML, isCommonPositive } from '../web/model.js';
 import { reconcile, acknowledge } from '../web/store.js';
 
 test('unknown checks do not become failures',()=>{
@@ -49,10 +49,37 @@ test('general note history preserves multiline text and ignores blank notes',()=
   assert.deepEqual(noteHistory([],'signal'),[]);
 });
 test('recurring totals exclude deposits and one-off fees, preserve unknown vs zero',()=>{
-  const home=newHome();home.costs.rent=2500;home.costs.deposit=5000;home.costs.agency=1250;
+  const home=newHome();home.costs.rent=2500;home.costs.deposit=5000;home.costs.agency=1250;home.costs.internet=80;
   assert.deepEqual(monthlyCost(home),{total:2500,known:1,complete:false});
-  for(const key of ['property','parking','internet'])home.costs[key]=0;
-  assert.deepEqual(monthlyCost(home),{total:2500,known:4,complete:true});
+  for(const key of ['property','parking'])home.costs[key]=0;
+  assert.deepEqual(monthlyCost(home),{total:2500,known:3,complete:true});
+  const restored=validateBackup({format:'rental-notes',version:1,homes:[home]})[0];
+  assert.equal(restored.costs.internet,80);
+  assert.deepEqual(monthlyCost(restored),{total:2500,known:3,complete:true});
+});
+
+test('difference mode hides only unanimous positive answers for two to four homes',()=>{
+  for(const [id,positive,retained] of [
+    ['balcony','pass',['unknown','fail','other']],
+    ['floor','good',['unknown','average','poor','other']],
+    ['entry_notice','pass',['unknown','fail','other']],
+  ]){
+    const check=CHECKS.find(c=>c.id===id);
+    const homes=Array.from({length:4},()=>newHome());
+    assert.equal(isCommonPositive([],check),false);
+    assert.equal(isCommonPositive(homes.slice(0,1),check),false);
+    for(const home of homes)home.checks[id]={status:positive,note:''};
+    for(const count of [2,3,4])assert.equal(isCommonPositive(homes.slice(0,count),check),true);
+    for(const status of retained){
+      homes[3].checks[id]={status,note:'保留核实'};
+      assert.equal(isCommonPositive(homes,check),false);
+      for(const home of homes)home.checks[id]={status,note:''};
+      assert.equal(isCommonPositive(homes,check),false);
+      for(const home of homes)home.checks[id]={status:positive,note:''};
+    }
+    delete homes[3].checks[id];
+    assert.equal(isCommonPositive(homes,check),false);
+  }
 });
 test('all check IDs are unique and maintenance access, downtime and cleaning are covered',()=>{
   assert.equal(new Set(CHECKS.map(c=>c.id)).size,CHECKS.length);

@@ -24,6 +24,10 @@ export function normalizeHome(raw) {
   return home;
 }
 export const getCheck = (home, id) => home.checks[id] || {status: 'unknown', note: ''};
+export function isCommonPositive(homes, check) {
+  const positive = {hard: 'pass', soft: 'good', contract: 'pass'}[check.kind];
+  return homes.length >= 2 && !!positive && homes.every(home => getCheck(home, check.id).status === positive);
+}
 export const homeLabel = home => [...new Set([home.community, home.name].map(v => String(v || '').trim()).filter(Boolean))].join(' · ') || '未命名房源';
 export const communityNames = homes => [...new Set(homes.map(home => String(home.community || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN'));
 export function noteHistory(homes, checkId = null) {
@@ -35,7 +39,7 @@ export function hardSummary(home) {
   return {total: checks.length, pass: checks.filter(c => getCheck(home, c.id).status === 'pass').length, fail: checks.filter(c => getCheck(home, c.id).status === 'fail').length, unknown: checks.filter(c => getCheck(home, c.id).status === 'unknown').length, other: checks.filter(c => getCheck(home, c.id).status === 'other').length};
 }
 export function monthlyCost(home) {
-  const values = COSTS.filter(c => c.monthly).map(c => home.costs[c.id]);
+  const values = COSTS.filter(c => c.monthly && !c.hidden).map(c => home.costs[c.id]);
   return {total: values.reduce((sum,v) => sum + (v ?? 0), 0), complete: values.every(v => v !== null), known: values.filter(v => v !== null).length};
 }
 export function validateBackup(raw) {
