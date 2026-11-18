@@ -74,8 +74,20 @@ class APITests(unittest.TestCase):
         self.assertEqual(home['community'],'花园小区')
         self.assertEqual(home['name'],'3栋1203')
         self.assertEqual(home['costs']['internet'],80)
+        self.assertEqual(home['propertyFeeBasis'],'monthly')
         for key in keys:
             self.assertEqual(home['checks'][key],{'status':'other','note':'约定后再确认'})
+
+    def test_area_property_fee_and_simplified_home_fields_survive_sync(self):
+        self.home.update(community='花园小区',layout='四房',bathrooms='两卫',floor='12 / 26',area='120',propertyFeeBasis='area')
+        self.home['costs']['property']=1.5
+        self.assertEqual(self.put().status_code,201)
+        home=create_app(self.config).test_client().get('/api/homes',headers=self.headers).json['items'][0]['data']
+        for key in ['community','layout','bathrooms','floor','area','propertyFeeBasis']:
+            self.assertEqual(home[key],self.home[key])
+        self.assertEqual(home['costs']['property'],1.5)
+        self.home['propertyFeeBasis']='unknown'
+        self.assertEqual(self.put(1).status_code,400)
 
     def test_invalid_values_and_mismatched_ids_are_rejected(self):
         self.home['costs']['rent']=-5

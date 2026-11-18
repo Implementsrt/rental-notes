@@ -50,12 +50,15 @@ def validate_home(raw, home_id):
     if not isinstance(raw, dict) or raw.get('id') != home_id:
         raise ValueError('房源 ID 不一致')
     home = {'id': home_id}
-    for key in ['community', 'name', 'address', 'link', 'contact', 'area', 'floor', 'visitDate', 'notes', 'updatedAt']:
+    for key in ['community', 'layout', 'bathrooms', 'name', 'address', 'link', 'contact', 'area', 'floor', 'visitDate', 'notes', 'updatedAt']:
         value = raw.get(key, '')
         limit = 10000 if key == 'notes' else 2000
         if not isinstance(value, str) or len(value) > limit:
             raise ValueError('文字字段格式或长度不正确')
         home[key] = value
+    home['propertyFeeBasis'] = raw.get('propertyFeeBasis', 'monthly')
+    if home['propertyFeeBasis'] not in ['area', 'monthly']:
+        raise ValueError('物业费单位不正确')
     if raw.get('decision') not in ['pending', 'shortlist', 'eliminated', 'chosen']:
         raise ValueError('房源状态不正确')
     home['decision'] = raw['decision']

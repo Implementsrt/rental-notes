@@ -1,5 +1,5 @@
-import { STAGES, CHECKS, LABELS, COSTS } from './checklist.js';
-import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML as esc, uuid, isCommonPositive } from './model.js';
+import { STAGES, CHECKS, LABELS, COSTS, checkDescription } from './checklist.js';
+import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, validateBackup, homeLabel, floorLabel, communityNames, noteHistory, escapeHTML as esc, uuid, isCommonPositive } from './model.js';
 import { reconcile, acknowledge } from './store.js';
 
 const API_BASE = window.RENT_CONFIG?.apiBase ?? null;
@@ -154,15 +154,15 @@ function renderGuide() {
   const groups = [...new Set(checks.map(c => c.group))];
   const homes = actualHomes();
   app.innerHTML = `${heading('A LITTLE PREPARATION, A BETTER HOME', '把每套房，看明白。', '从第一次筛选，到落笔签约。带着标准看房，留下自己的判断。')}
-    <div class="steps" aria-label="看房的三个阶段">${STAGES.map(s => `<button class="step ${s.id === state.stage ? 'active' : ''}" data-stage="${s.id}" aria-pressed="${s.id === state.stage}"><span class="number">0${s.id}</span><span><strong>${s.name}</strong><small>${['排除不符合的房','亲自检查居住细节','把责任写进合同'][s.id-1]}</small></span><span class="arrow">↗</span></button>`).join('')}</div>
+    <div class="steps" aria-label="看房的三个阶段">${STAGES.map(s => `<button class="step ${s.id === state.stage ? 'active' : ''}" data-stage="${s.id}" aria-pressed="${s.id === state.stage}"><span class="number">0${s.id}</span><span><strong>${s.name}</strong><small>${['浏览提示 · 无需填写','到场逐项核实并记录','把责任写进合同'][s.id-1]}</small></span><span class="arrow">↗</span></button>`).join('')}</div>
     <div class="guide-layout"><section class="guide-main"><div class="section-intro"><span class="section-number">0${stage.id}</span><div><h2>${stage.title}</h2><p>${stage.intro}</p></div></div>
     <div class="legend"><span><i class="kind-dot"></i>硬性条件</span><span><i class="kind-dot soft"></i>软性评估</span><span><i class="kind-dot contract"></i>责任确认</span></div>
     ${stageReminders(stage)}
-    ${groups.map(group => `<div class="group-label">${group}</div><div class="guide-grid">${checks.filter(c => c.group === group).map(c => `<article class="guide-item"><h3><i class="kind-dot ${c.kind}"></i>${esc(c.label)}</h3><p>${esc(c.how)}</p></article>`).join('')}</div>`).join('')}
-    <div class="guide-bottom"><p>按下方说明逐项确认，随手记录实际情况。</p><button class="button quiet" data-next-stage>${state.stage === 3 ? '回到快速筛房' : '下一步：' + STAGES[state.stage].name} →</button></div>
+    ${groups.map(group => `<div class="group-label">${group === '到场先查' && state.stage === 1 ? '先询问，到场再核实' : group === '网上先问' && state.stage === 2 ? '朝向、配套与费用复核' : group}</div><div class="guide-grid">${checks.filter(c => c.group === group).map(c => `<article class="guide-item"><h3><i class="kind-dot ${c.kind}"></i>${esc(c.label)}</h3><p>${esc(checkDescription(c, state.stage))}</p></article>`).join('')}</div>`).join('')}
+    <div class="guide-bottom"><p>${state.stage === 1 ? '这一步仅供网上浏览筛选，不填写房源检查结果。' : '按说明现场逐项确认，记录实际情况。'}</p><button class="button quiet" data-next-stage>${state.stage === 3 ? '回到网上筛房' : '下一步：' + STAGES[state.stage].name} →</button></div>
     ${state.stage === 3 ? `<p class="sources">约定提示：维修影响使用，应相应减少租金或延长租期；具体减免及退出条件请写入合同。<br><a href="https://www.court.gov.cn/zixun/xiangqing/233181.html" target="_blank" rel="noopener noreferrer">民法典第713条 ↗</a><a href="https://xzfg.moj.gov.cn/front/law/detail?LawID=1774" target="_blank" rel="noopener noreferrer">住房租赁条例第9条 ↗</a><a href="https://htsfwb.samr.gov.cn/View?id=2340996b-882d-47a4-b74d-c30784628737" target="_blank" rel="noopener noreferrer">租赁合同示范文本 ↗</a></p>` : ''}</section>
     <aside class="guide-side"><div class="side-panel"><h3>一步一步，心里有数。</h3><p>${stage.tip}</p><div class="mini-route">${STAGES.map(s => `<div class="${s.id === stage.id ? 'current' : ''}"><b>${s.id}</b><span>${s.short} · ${s.name}</span></div>`).join('')}</div>
-    ${homes.length ? `<label class="sr-only" for="guide-home">选择要记录的房源</label><select id="guide-home">${homes.map(h => `<option value="${h.id}">${esc(homeLabel(h))}</option>`).join('')}</select><button class="button primary" id="guide-record">按这一步记录 ↗</button>` : '<button class="button primary" id="guide-create">＋ 记录第一套房</button>'}<p class="small-note">未确认的项目保持空白，留到下一次核实。</p></div></aside></div>`;
+    ${state.stage === 1 ? '<p class="small-note">这里只作筛房提示，不填写记录。到现场后，再按仔细验房核实。</p>' : `${homes.length ? `<label class="sr-only" for="guide-home">选择要记录的房源</label><select id="guide-home">${homes.map(h => `<option value="${h.id}">${esc(homeLabel(h))}</option>`).join('')}</select><button class="button primary" id="guide-record">按这一步记录 ↗</button>` : '<button class="button primary" id="guide-create">＋ 记录第一套房</button>'}<p class="small-note">未确认的项目保持空白，留到下一次核实。</p>`}</div></aside></div>`;
   app.querySelectorAll('[data-stage]').forEach(button => button.onclick = () => {state.stage = Number(button.dataset.stage); renderGuide();});
   $('[data-next-stage]').onclick = () => {state.stage = state.stage % 3 + 1; renderGuide(); window.scrollTo({top:0,behavior:'instant'});};
   if ($('#guide-create')) $('#guide-create').onclick = () => createHome(state.stage);
@@ -188,7 +188,7 @@ function renderHomes() {
 }
 
 function renderHomeResults() {
-  const homes = visibleHomes().filter(h => (state.filter === 'all' || h.decision === state.filter) && `${h.community} ${h.name} ${h.address}`.toLowerCase().includes(state.search.toLowerCase()));
+  const homes = visibleHomes().filter(h => (state.filter === 'all' || h.decision === state.filter) && `${h.community} ${h.name} ${h.address} ${h.layout} ${h.floor} ${h.bathrooms}`.toLowerCase().includes(state.search.toLowerCase()));
   homes.sort((a,b) => state.sort === 'rent' ? (a.costs.rent ?? Infinity) - (b.costs.rent ?? Infinity) : state.sort === 'hard' ? hardSummary(b).pass - hardSummary(a).pass : b.updatedAt.localeCompare(a.updatedAt));
   const hasAny = visibleHomes().length;
   $('#home-results').innerHTML = homes.length ? `<div class="home-grid">${homes.map(homeCard).join('')}</div>` : `<div class="empty-state"><div class="empty-illustration">${HOUSE}</div><h2>${hasAny ? '没有找到匹配的房源' : '下一套好房，从这里记起。'}</h2><p>${hasAny ? '换一个关键词，或切换筛选条件。' : '房租、采光、噪音和那些容易忘的小细节，<br>都可以为每套房单独记录。'}</p>${hasAny ? '' : '<div class="empty-actions"><button class="button primary" id="empty-create">＋ 记录第一套房</button><button class="text-button" id="try-demo">先用示例体验 ↗</button></div>'}</div>`;
@@ -200,7 +200,7 @@ function renderHomeResults() {
 }
 function homeCard(home) {
   const hard = hardSummary(home), monthly = monthlyCost(home), selected = state.selected.has(home.id);
-  return `<article class="home-card ${selected ? 'selected' : ''}"><div class="card-top"><span class="home-symbol" aria-hidden="true">⌂</span><span class="badge ${home.decision}">${DECISIONS[home.decision]}</span></div><h2 class="home-title">${esc(homeLabel(home))}</h2><p class="home-meta">${esc(home.address || '位置待补充')}${home.floor ? ` · ${esc(home.floor)}` : ''}</p><p class="rent">${home.costs.rent === null ? '待填房租' : `<span class="currency">¥</span>${Number(home.costs.rent).toLocaleString('zh-CN')}<small>/ 月</small>`}</p><p class="monthly-caption">${monthly.known ? `固定月支出${monthly.complete ? ' ' : '至少 '}${money(monthly.total)}${monthly.complete ? '' : ' · 部分费用待填'}` : '固定月支出待确认'}</p><div class="hard-progress"><div class="progress-label"><span>硬性条件 <strong>${hard.pass}/${hard.total} 符合</strong></span><strong class="${hard.fail ? 'failed' : ''}">${hard.fail ? hard.fail + '项不符合' : '暂无不符合项'}</strong></div><div class="progress-track"><span class="pass" style="width:${hard.pass / hard.total * 100}%"></span><span class="fail" style="width:${hard.fail / hard.total * 100}%"></span></div><p class="pending-caption">${hard.unknown} 项待确认${hard.other ? ` · ${hard.other} 项其他` : ''}</p></div><div class="card-bottom"><label class="compare-check"><input type="checkbox" data-select-home="${home.id}" ${selected ? 'checked' : ''}>加入对比</label><button class="button" data-edit="${home.id}" ${state.demo ? 'disabled' : ''}>查看与记录 ↗</button></div></article>`;
+  return `<article class="home-card ${selected ? 'selected' : ''}"><div class="card-top"><span class="home-symbol" aria-hidden="true">⌂</span><span class="badge ${home.decision}">${DECISIONS[home.decision]}</span></div><h2 class="home-title">${esc(homeLabel(home))}</h2><p class="home-meta">${esc([home.layout, floorLabel(home), home.bathrooms, home.area ? home.area+'㎡' : ''].filter(Boolean).join(' · ') || '房型、楼层待补充')}</p><p class="rent">${home.costs.rent === null ? '待填房租' : `<span class="currency">¥</span>${Number(home.costs.rent).toLocaleString('zh-CN')}<small>/ 月</small>`}</p><p class="monthly-caption">${monthly.known ? `固定月支出${monthly.complete ? ' ' : '至少 '}${money(monthly.total)}${monthly.complete ? '' : ' · 部分费用待填'}` : '固定月支出待确认'}</p><div class="hard-progress"><div class="progress-label"><span>硬性条件 <strong>${hard.pass}/${hard.total} 符合</strong></span><strong class="${hard.fail ? 'failed' : ''}">${hard.fail ? hard.fail + '项不符合' : '暂无不符合项'}</strong></div><div class="progress-track"><span class="pass" style="width:${hard.pass / hard.total * 100}%"></span><span class="fail" style="width:${hard.fail / hard.total * 100}%"></span></div><p class="pending-caption">${hard.unknown} 项待确认${hard.other ? ` · ${hard.other} 项其他` : ''}</p></div><div class="card-bottom"><label class="compare-check"><input type="checkbox" data-select-home="${home.id}" ${selected ? 'checked' : ''}>加入对比</label><button class="button" data-edit="${home.id}" ${state.demo ? 'disabled' : ''}>查看与记录 ↗</button></div></article>`;
 }
 function selectHome(id, selected) {
   if (selected && state.selected.size >= 4) {toast('一次最多对比4套房。先取消一套再添加。');return;}
@@ -223,7 +223,7 @@ function renderCompare() {
   app.innerHTML = `${heading('SIDE BY SIDE, CLEARER CHOICES', '放在一起，差别更清楚。', '硬性看是否符合，软性看实际感受。未确认项不会当作不符合。')}${sampleBanner()}
   ${homes.length ? `<div class="compare-picker" aria-label="选择对比房源">${homes.map(h => `<label class="pick-pill ${state.selected.has(h.id) ? 'selected' : ''}"><input type="checkbox" data-pick="${h.id}" ${state.selected.has(h.id) ? 'checked' : ''}>${esc(homeLabel(h))}</label>`).join('')}</div>` : ''}
   ${selected.length < 2 ? `<div class="empty-state"><div class="empty-illustration">${HOUSE}</div><h2>${homes.length ? '选两套房，开始比较。' : '有了记录，才有比较。'}</h2><p>选择2至4套房源，并排查看费用、硬性条件、<br>居住体验与签约待确认事项。</p><div class="empty-actions"><a class="button primary" href="#homes">${homes.length ? '去房源列表选择' : '去记录房源'} →</a>${!homes.length ? '<button class="text-button" id="compare-demo">查看示例对比 ↗</button>' : ''}</div></div>` : `<div class="compare-controls"><div class="filters" role="group" aria-label="对比显示方式"><button data-compare-filter="all" aria-pressed="${!state.differencesOnly}" class="${!state.differencesOnly?'active':''}">全部项目</button><button data-compare-filter="differences" aria-pressed="${state.differencesOnly}" class="${state.differencesOnly?'active':''}">差异项</button></div><p class="form-hint">${state.differencesOnly ? `已隐藏 ${CHECKS.length-checks.length} 项全部为“符合 / 满意 / 已明确”的核对项。` : '差异项仅隐藏全部房源都为“符合 / 满意 / 已明确”的核对项。'}未确认、未评估及不符合等结果保留。</p></div><p class="form-hint">左右滑动查看其他房源，纵向滚动查看更多指标。</p><div class="comparison-scroll" tabindex="0" aria-label="房源对比表，可横向滚动"><table class="comparison-table" style="min-width:${170 + selected.length * 245}px"><thead><tr><th scope="col">对比项目</th>${selected.map(h => `<th scope="col">${esc(homeLabel(h))}<div class="cell-note">${DECISIONS[h.decision]}</div></th>`).join('')}</tr></thead><tbody>
-  ${category('基本情况与费用')}${row('小区',h=>esc(h.community || '待填写'))}${row('位置',h=>esc(h.address || '待填写'))}${row('面积 / 楼层',h=>esc([h.area ? h.area+'㎡' : '',h.floor].filter(Boolean).join(' / ') || '待填写'))}${COSTS.filter(c=>!c.hidden).map(c=>row(c.label+(c.monthly?' / 月':''),h=>money(h.costs[c.id]))).join('')}${row('固定月支出',h=>{const c=monthlyCost(h);return c.known ? `${c.complete?'':'至少 '}${money(c.total)}${c.complete?'':'<div class="cell-note">部分费用待填；不含水电气等用量费用</div>'}`:'待确认';})}${checkSection('hard','硬性条件')}${checkSection('soft','软性评估')}${checkSection('contract','签约责任')}${category('其他记录')}${row('综合备注',h=>`<div class="cell-note">${esc(h.notes || '暂无备注')}</div>`)}</tbody></table></div><p class="compare-note">手机可左右滑动表格。每月费用、一次性费用与押金分别列出；空白费用不会视为0，押金不计入月支出。</p>`}`;
+  ${category('基本情况与费用')}${row('小区',h=>esc(h.community || '待填写'))}${row('房型',h=>esc(h.layout || '待填写'))}${row('楼层',h=>esc(floorLabel(h) || '待填写'))}${row('卫生间',h=>esc(h.bathrooms || '待填写'))}${row('面积',h=>esc(h.area ? h.area+'㎡' : '未填写'))}${COSTS.filter(c=>!c.hidden).map(c=>row(c.label+(c.monthly&&c.id!=='property'?' / 月':''),h=>money(h.costs[c.id])+(c.id==='property'&&h.costs.property!==null?` / ${h.propertyFeeBasis==='area'?'m²·月':'月（旧记录）'}`:''))).join('')}${row('固定月支出',h=>{const c=monthlyCost(h);return c.known ? `${c.complete?'':'至少 '}${money(c.total)}${c.complete?'':'<div class="cell-note">部分费用或物业计费面积待填；不含水电气等用量费用</div>'}`:'待确认';})}${checkSection('hard','硬性条件')}${checkSection('soft','软性评估')}${checkSection('contract','签约责任')}${category('其他记录')}${row('综合备注',h=>`<div class="cell-note">${esc(h.notes || '暂无备注')}</div>`)}</tbody></table></div><p class="compare-note">手机可左右滑动表格。物业月费按单价×面积计算；旧记录按原每月金额计算。空白费用或缺少计费面积均保持待确认，押金不计入月支出。</p>`}`;
   app.querySelectorAll('[data-pick]').forEach(input => input.onchange = () => {selectHome(input.dataset.pick,input.checked);renderCompare();});
   app.querySelectorAll('[data-compare-filter]').forEach(button => button.onclick = () => {state.differencesOnly=button.dataset.compareFilter==='differences';renderCompare();});
   if ($('#compare-demo')) $('#compare-demo').onclick = () => {enableDemo(); state.selected = new Set(samples.slice(0,2).map(h=>h.id));renderCompare();updateStatus();};
@@ -237,8 +237,9 @@ function createHome(tab) {
 }
 function openEditor(id, tab) {
   if (state.demo || !items[id] || items[id].deleted) return;
+  if (![0, 2, 3].includes(tab)) tab = 2;
   state.editing = id; state.editorTab = tab;
-  editor.innerHTML = `<div class="dialog-header"><div><h2 id="editor-title">记录房源</h2><p>每次修改自动保存，按实际检查情况填写。</p></div><button class="icon-button" id="close-editor" aria-label="关闭记录">×</button></div><div class="editor-tabs" role="tablist" aria-label="房源记录分类">${['基本信息','① 快速筛房','② 仔细验房','③ 签约确认'].map((name,i)=>`<button role="tab" id="editor-tab-${i}" data-editor-tab="${i}" aria-controls="editor-panel" aria-selected="${i===tab}" class="${i===tab?'active':''}">${name}</button>`).join('')}</div><div id="editor-panel" class="editor-content" role="tabpanel"></div><div class="editor-footer"><span class="saved-note" id="editor-saved"></span><div class="editor-footer-actions"><button class="text-button" id="delete-home">删除</button><button class="button primary" id="done-editor">完成</button></div></div>`;
+  editor.innerHTML = `<div class="dialog-header"><div><h2 id="editor-title">记录房源</h2><p>每次修改自动保存，按现场核实的实际情况填写。</p></div><button class="icon-button" id="close-editor" aria-label="关闭记录">×</button></div><div class="editor-tabs" role="tablist" aria-label="房源记录分类">${[[0,'基本信息'],[2,'仔细验房'],[3,'签约确认']].map(([i,name])=>`<button role="tab" id="editor-tab-${i}" data-editor-tab="${i}" aria-controls="editor-panel" aria-selected="${i===tab}" class="${i===tab?'active':''}">${name}</button>`).join('')}</div><div id="editor-panel" class="editor-content" role="tabpanel"></div><div class="editor-footer"><span class="saved-note" id="editor-saved"></span><div class="editor-footer-actions"><button class="text-button" id="delete-home">删除</button><button class="button primary" id="done-editor">完成</button></div></div>`;
   $('#close-editor').onclick = $('#done-editor').onclick = () => {if (editorInputsValid()) editor.close();};
   $('#delete-home').onclick = () => deleteHome(id);
   editor.querySelectorAll('[data-editor-tab]').forEach(button => button.onclick = () => switchEditorTab(Number(button.dataset.editorTab)));
@@ -256,6 +257,39 @@ function editorInputsValid() {
   if (invalid) {invalid.reportValidity();invalid.focus();return false;}
   return true;
 }
+function bindCommunityPicker(home, communities) {
+  const wrapper = $('#community-combobox'), input = $('#community-input'), toggle = $('#community-toggle'), list = $('#community-options');
+  let candidates = [], active = -1;
+  const close = () => {
+    list.hidden = true; active = -1;
+    input.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  };
+  const choose = name => {input.value = name; home.community = name; changed(home); input.focus(); close();};
+  const show = (all = false) => {
+    const query = input.value.trim().toLocaleLowerCase('zh-CN');
+    candidates = communities.filter(name => all || name.toLocaleLowerCase('zh-CN').includes(query)); active = -1;
+    list.innerHTML = candidates.length ? candidates.map((name, index) => `<button type="button" role="option" id="community-option-${index}" aria-selected="false" tabindex="-1" data-community-index="${index}">${esc(name)}</button>`).join('') : '<div class="community-empty" role="option" aria-disabled="true">没有匹配的小区，可直接输入新名称</div>';
+    list.hidden = false; input.setAttribute('aria-expanded', 'true'); toggle.setAttribute('aria-expanded', 'true'); input.removeAttribute('aria-activedescendant');
+    list.querySelectorAll('[data-community-index]').forEach(option => {
+      option.onmousedown = event => event.preventDefault();
+      option.onclick = () => choose(candidates[Number(option.dataset.communityIndex)]);
+    });
+  };
+  input.oninput = () => {home.community = input.value.trim(); changed(home); show();};
+  input.onfocus = () => show();
+  toggle.onclick = () => {if (list.hidden) {input.focus(); show(true);} else close();};
+  wrapper.addEventListener('focusout', event => {if (!wrapper.contains(event.relatedTarget)) close();});
+  input.onkeydown = event => {
+    if (event.key === 'Escape' && !list.hidden) {event.preventDefault(); event.stopPropagation(); close();}
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault(); if (list.hidden) show(); if (!candidates.length) return;
+      active = (active + (event.key === 'ArrowDown' ? 1 : active < 0 ? 0 : -1) + candidates.length) % candidates.length;
+      list.querySelectorAll('[role=option]').forEach((option, index) => option.setAttribute('aria-selected', index === active));
+      const option = $(`#community-option-${active}`); input.setAttribute('aria-activedescendant', option.id); option.scrollIntoView({block:'nearest'});
+    } else if (event.key === 'Enter' && !list.hidden && active >= 0) {event.preventDefault(); choose(candidates[active]);}
+  };
+}
 function renderEditorPanel() {
   const home = items[state.editing]?.data;
   if (!home) return;
@@ -269,30 +303,27 @@ function renderEditorPanel() {
   panel.setAttribute('aria-labelledby',`editor-tab-${state.editorTab}`);
   if (state.editorTab === 0) {
     const communities = communityNames(actualHomes());
-    const selectedCommunity = communities.indexOf(home.community.trim());
-    const enteringNew = !communities.length || (!!home.community && selectedCommunity < 0);
     const field = (id,label,type='text',placeholder='',full=false) => `<label class="form-field ${full?'full':''}"><span>${label}</span><input data-field="${id}" type="${type}" value="${esc(home[id])}" placeholder="${placeholder}" maxlength="2000"></label>`;
-    panel.innerHTML = `<p class="form-hint">先选小区，再用房号或标识区分不同房源。费用不知道就留空，确认免费再填0。</p><div class="form-grid">
-    <label class="form-field full"><span>小区名称</span><select id="community-picker"><option value="" ${!home.community && !enteringNew?'selected':''}>选择已有小区</option>${communities.map((name,index)=>`<option value="existing:${index}" ${index===selectedCommunity?'selected':''}>${esc(name)}</option>`).join('')}<option value="new" ${enteringNew?'selected':''}>＋ 填写新小区</option></select></label>
-    <label class="form-field full" id="new-community-field" ${enteringNew?'':'hidden'}><span>新小区名称</span><input id="new-community" type="text" maxlength="2000" value="${esc(enteringNew?home.community:'')}" placeholder="输入小区名称，如：花园小区" autocomplete="off"></label>
-    ${field('name','房源标识（选填）','text','如：3栋1203 / 南向一居')}${field('address','楼栋 / 房号 / 位置','text','如：3栋1203，靠近南门')}${field('area','面积（㎡）','text','如：45')}${field('floor','楼层 / 总楼层','text','如：12 / 26')}${field('visitDate','看房日期','date')}
-    <label class="form-field"><span>当前考虑状态</span><select data-field="decision">${Object.entries(DECISIONS).map(([id,label])=>`<option value="${id}" ${home.decision===id?'selected':''}>${label}</option>`).join('')}</select></label>${field('link','房源链接','url','粘贴平台链接',true)}${field('contact','联系信息','text','中介 / 房东联系方式',true)}<div class="form-caption">费用明细</div>${COSTS.filter(c=>!c.hidden).map(c=>`<label class="form-field"><span>${c.label}</span><input data-cost="${c.id}" type="number" inputmode="decimal" min="0" max="100000000" step="0.01" value="${home.costs[c.id]??''}" placeholder="待确认"><small>${c.unit}</small></label>`).join('')}<div class="form-caption">补充记录</div><div class="form-field full"><label class="note-field-label" for="home-notes">综合印象 / 待追问事项</label>${historyPicker('general','综合备注')}<textarea id="home-notes" data-field="notes" maxlength="10000" placeholder="记下你最在意的优点、顾虑和房东的口头承诺…">${esc(home.notes)}</textarea></div></div>`;
-    panel.querySelectorAll('[data-field]').forEach(input=>input.addEventListener('input',()=>{home[input.dataset.field]=input.value;changed(home);}));
-    $('#community-picker').onchange = event => {
-      const value = event.target.value;
-      $('#new-community-field').hidden = value !== 'new';
-      home.community = value === 'new' ? $('#new-community').value.trim() : communities[Number(value.split(':')[1])] || '';
-      changed(home);
-      if (value === 'new') $('#new-community').focus();
+    const choice = (id, label, values) => `<label class="form-field"><span>${label}</span><select data-field="${id}"><option value="">待确认</option>${[...new Set([...values, home[id]].filter(Boolean))].map(value => `<option value="${esc(value)}" ${home[id]===value?'selected':''}>${esc(value)}</option>`).join('')}</select></label>`;
+    panel.innerHTML = `<p class="form-hint">记录小区、房型、楼层和卫生间，面积可不填。费用不知道就留空，确认免费再填0。</p><div class="form-grid">
+    <div class="form-field full"><label class="note-field-label" for="community-input">小区名称</label><div class="community-combobox" id="community-combobox"><div class="community-input-row"><input id="community-input" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="community-options" aria-expanded="false" maxlength="2000" value="${esc(home.community)}" placeholder="输入名称，或点右侧选择" autocomplete="off"><button type="button" id="community-toggle" aria-label="下拉选择已有小区" aria-controls="community-options" aria-expanded="false">⌄</button></div><div id="community-options" class="community-options" role="listbox" aria-label="小区候选" hidden></div></div></div>
+    ${choice('layout','房型',['三房','四房'])}${field('floor','楼层','text','如：12 / 26')}${choice('bathrooms','卫生间',['一卫','两卫'])}${field('area','面积（㎡，选填）','text','如：100')}
+    <div class="form-caption">费用明细</div>${COSTS.filter(c=>!c.hidden).map(c=>`<label class="form-field"><span>${c.label}</span><input data-cost="${c.id}" type="number" inputmode="decimal" min="0" max="100000000" step="0.01" value="${home.costs[c.id]??''}" placeholder="待确认"><small>${c.id==='property'&&home.propertyFeeBasis==='monthly'?'元/月（旧记录，保留原单位）':c.unit}</small></label>`).join('')}<p class="form-hint full" id="property-calculation"></p><div class="form-caption">补充记录</div><label class="form-field"><span>当前考虑状态</span><select data-field="decision">${Object.entries(DECISIONS).map(([id,label])=>`<option value="${id}" ${home.decision===id?'selected':''}>${label}</option>`).join('')}</select></label><div class="form-field full"><label class="note-field-label" for="home-notes">综合印象 / 待追问事项</label>${historyPicker('general','综合备注')}<textarea id="home-notes" data-field="notes" maxlength="10000" placeholder="记下你最在意的优点、顾虑和房东的口头承诺…">${esc(home.notes)}</textarea></div></div>`;
+    panel.querySelector('[data-field=area]').inputMode = 'decimal';
+    const updatePropertyHint = () => {
+      const monthly = propertyMonthlyCost(home);
+      $('#property-calculation').textContent = home.propertyFeeBasis === 'monthly' ? '旧记录的物业费按每月金额保留，计入月支出。新建房源按元/m²填写。' : `物业费按每平方米每月填写，月费＝单价×计费面积。${monthly === null ? '未填单价或面积时，物业月费保持待确认。' : `当前物业月费 ${money(monthly)}。`}如实际计费面积与房源面积不同，请在综合备注注明。`;
     };
-    $('#new-community').oninput = event => {home.community=event.target.value.trim();changed(home);};
+    panel.querySelectorAll('[data-field]').forEach(input=>input.addEventListener('input',()=>{home[input.dataset.field]=input.value;changed(home);if(input.dataset.field==='area')updatePropertyHint();}));
+    bindCommunityPicker(home, communities);
+    updatePropertyHint();
     panel.querySelectorAll('[data-cost]').forEach(input=>input.addEventListener('input',()=>{
       if (!input.validity.valid) {input.setAttribute('aria-invalid','true');return;}
-      input.removeAttribute('aria-invalid');home.costs[input.dataset.cost]=input.value===''?null:Number(input.value);changed(home);
+      input.removeAttribute('aria-invalid');home.costs[input.dataset.cost]=input.value===''?null:Number(input.value);changed(home);if(input.dataset.cost==='property')updatePropertyHint();
     }));
   } else {
     const stage=STAGES[state.editorTab-1], checks=CHECKS.filter(c=>c.stages.includes(stage.id));
-    panel.innerHTML = `<div class="editor-step-intro">点选检查结果；选择“其他”后，可复用历史备注或直接填写。</div>${stageReminders(stage)}${checks.map(c=>{const value=getCheck(home,c.id);return `<section class="check-row" data-check-row="${c.id}"><div class="check-row-heading"><strong>${esc(c.label)}</strong><span class="kind-label ${c.kind}">${{hard:'硬性',soft:'软性',contract:'责任'}[c.kind]}</span></div><p class="check-how" id="how-${c.id}">${esc(c.how)}</p><div class="status-options" role="group" aria-label="${esc(c.label)}" aria-describedby="how-${c.id}">${Object.entries(LABELS[c.kind]).map(([status,label])=>`<button data-check="${c.id}" data-value="${status}" aria-pressed="${value.status===status}" ${status==='other'?`aria-controls="details-${c.id}" aria-expanded="${value.status==='other'}"`:''}>${label}</button>`).join('')}</div><div class="check-details" id="details-${c.id}" ${value.status==='other'?'':'hidden'}>${historyPicker(c.id,c.label)}<label class="sr-only" for="note-${c.id}">${esc(c.label)}的具体情况</label><textarea id="note-${c.id}" class="check-note" data-note="${c.id}" maxlength="3000" rows="2" placeholder="写下具体情况、金额或约定…">${esc(value.note)}</textarea></div></section>`;}).join('')}`;
+    panel.innerHTML = `<div class="editor-step-intro">${esc(stage.intro)}<br>点选实际核实结果；选择“其他”后，可复用历史备注或直接填写。</div>${stageReminders(stage)}${checks.map(c=>{const value=getCheck(home,c.id);return `<section class="check-row" data-check-row="${c.id}"><div class="check-row-heading"><strong>${esc(c.label)}</strong><span class="kind-label ${c.kind}">${{hard:'硬性',soft:'软性',contract:'责任'}[c.kind]}</span></div><p class="check-how" id="how-${c.id}">${esc(c.how)}</p><div class="status-options" role="group" aria-label="${esc(c.label)}" aria-describedby="how-${c.id}">${Object.entries(LABELS[c.kind]).map(([status,label])=>`<button data-check="${c.id}" data-value="${status}" aria-pressed="${value.status===status}" ${status==='other'?`aria-controls="details-${c.id}" aria-expanded="${value.status==='other'}"`:''}>${label}</button>`).join('')}</div><div class="check-details" id="details-${c.id}" ${value.status==='other'?'':'hidden'}>${historyPicker(c.id,c.label)}<label class="sr-only" for="note-${c.id}">${esc(c.label)}的具体情况</label><textarea id="note-${c.id}" class="check-note" data-note="${c.id}" maxlength="3000" rows="2" placeholder="写下具体情况、金额或约定…">${esc(value.note)}</textarea></div></section>`;}).join('')}`;
     panel.querySelectorAll('[data-check]').forEach(button=>button.onclick=()=>{
       const id=button.dataset.check, status=button.dataset.value;
       home.checks[id]={...getCheck(home,id),status};changed(home);
@@ -380,8 +411,8 @@ $('#import-file').onchange=async event=>{
 };
 
 const samples=[0,1,2].map(index=>{
-  const home=newHome();home.name=['南向小两居','地铁口公寓','安静的高层'][index];home.address=['示例 · 花园小区','示例 · 近地铁','示例 · 小区内侧'][index];home.floor=['12 / 26','8 / 18','21 / 32'][index];home.area=['48','42','51'][index];home.decision=['shortlist','eliminated','pending'][index];
-  home.costs={rent:[2600,2400,2800][index],property:[120,180,null][index],parking:[250,300,200][index],agency:[1300,0,null][index],cleanIn:0,cleanOut:null,deposit:[2600,2400,2800][index]};
+  const home=newHome();home.community=['示例 · 花园小区','示例 · 近地铁小区','示例 · 花园小区'][index];home.layout=['三房','四房','三房'][index];home.bathrooms=['两卫','两卫','一卫'][index];home.floor=['12 / 26','8 / 18','21 / 32'][index];home.area=['100','120','95'][index];home.decision=['shortlist','eliminated','pending'][index];
+  home.costs={rent:[2600,2400,2800][index],property:[1.2,1.5,null][index],parking:[250,300,200][index],agency:[1300,0,null][index],cleanIn:0,cleanOut:null,deposit:[2600,2400,2800][index]};
   for(const c of CHECKS){home.checks[c.id]={status:c.kind==='hard'?'pass':c.kind==='soft'?['good','average','good'][index]:'unknown',note:''};}
   home.checks.signal.status='unknown';home.checks.working.status='unknown';
   if(index===1){home.checks.closed_kitchen={status:'fail',note:'实际是开放式厨房'};home.checks.street_noise={status:'poor',note:'晚高峰临街车流声较明显'};}

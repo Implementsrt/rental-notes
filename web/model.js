@@ -2,13 +2,16 @@ import { CHECKS, LABELS, COSTS } from './checklist.js';
 export const uuid = () => crypto.randomUUID();
 export const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function newHome() {
-  return {id: uuid(), community: '', name: '', address: '', link: '', contact: '', area: '', floor: '', visitDate: '', decision: 'pending', notes: '', costs: Object.fromEntries(COSTS.map(c => [c.id, null])), checks: {}, updatedAt: new Date().toISOString()};
+  return {id: uuid(), community: '', layout: '', bathrooms: '', name: '', address: '', link: '', contact: '', area: '', floor: '', visitDate: '', decision: 'pending', notes: '', propertyFeeBasis: 'area', costs: Object.fromEntries(COSTS.map(c => [c.id, null])), checks: {}, updatedAt: new Date().toISOString()};
 }
 export function normalizeHome(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('房源格式不正确');
   const home = newHome();
   if (typeof raw.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw.id)) home.id = raw.id;
-  for (const key of ['community','name','address','link','contact','area','floor','visitDate','notes']) home[key] = String(raw[key] ?? '').slice(0, key === 'notes' ? 10000 : 2000);
+  for (const key of ['community','layout','bathrooms','name','address','link','contact','area','floor','visitDate','notes']) home[key] = String(raw[key] ?? '').slice(0, key === 'notes' ? 10000 : 2000);
+  // Older records contain a monthly amount, never reinterpret it as a rate.
+  home.propertyFeeBasis = raw.propertyFeeBasis ?? 'monthly';
+  if (!['area', 'monthly'].includes(home.propertyFeeBasis)) throw new Error('物业费单位不正确');
   if (['pending','shortlist','eliminated','chosen'].includes(raw.decision)) home.decision = raw.decision;
   for (const c of COSTS) {
     const v = raw.costs?.[c.id];
@@ -28,7 +31,8 @@ export function isCommonPositive(homes, check) {
   const positive = {hard: 'pass', soft: 'good', contract: 'pass'}[check.kind];
   return homes.length >= 2 && !!positive && homes.every(home => getCheck(home, check.id).status === positive);
 }
-export const homeLabel = home => [...new Set([home.community, home.name].map(v => String(v || '').trim()).filter(Boolean))].join(' · ') || '未命名房源';
+export const floorLabel = home => home.floor ? (/层/.test(home.floor) ? home.floor : `${home.floor}层`) : '';
+export const homeLabel = home => [...new Set([home.community, ...(home.name ? [home.name] : [home.layout, floorLabel(home), home.bathrooms])].map(v => String(v || '').trim()).filter(Boolean))].join(' · ') || '未命名房源';
 export const communityNames = homes => [...new Set(homes.map(home => String(home.community || '').trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN'));
 export function noteHistory(homes, checkId = null) {
   const recent = [...homes].sort((a,b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
@@ -38,8 +42,17 @@ export function hardSummary(home) {
   const checks = CHECKS.filter(c => c.kind === 'hard');
   return {total: checks.length, pass: checks.filter(c => getCheck(home, c.id).status === 'pass').length, fail: checks.filter(c => getCheck(home, c.id).status === 'fail').length, unknown: checks.filter(c => getCheck(home, c.id).status === 'unknown').length, other: checks.filter(c => getCheck(home, c.id).status === 'other').length};
 }
+export function propertyMonthlyCost(home) {
+  const fee = home.costs.property;
+  if (fee === null || fee === undefined) return null;
+  if (home.propertyFeeBasis !== 'area' || fee === 0) return fee;
+  const area = String(home.area).trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(area) || !Number.isFinite(Number(area)) || Number(area) <= 0) return null;
+  const monthly = Math.round((fee * Number(area) + Number.EPSILON) * 100) / 100;
+  return Number.isFinite(monthly) ? monthly : null;
+}
 export function monthlyCost(home) {
-  const values = COSTS.filter(c => c.monthly && !c.hidden).map(c => home.costs[c.id]);
+  const values = COSTS.filter(c => c.monthly && !c.hidden).map(c => c.id === 'property' ? propertyMonthlyCost(home) : home.costs[c.id] ?? null);
   return {total: values.reduce((sum,v) => sum + (v ?? 0), 0), complete: values.every(v => v !== null), known: values.filter(v => v !== null).length};
 }
 export function validateBackup(raw) {

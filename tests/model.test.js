@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CHECKS } from '../web/checklist.js';
-import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML, isCommonPositive } from '../web/model.js';
+import { CHECKS, STAGES, checkDescription } from '../web/checklist.js';
+import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML, isCommonPositive } from '../web/model.js';
 import { reconcile, acknowledge } from '../web/store.js';
 
 test('unknown checks do not become failures',()=>{
@@ -56,6 +56,37 @@ test('recurring totals exclude deposits and one-off fees, preserve unknown vs ze
   const restored=validateBackup({format:'rental-notes',version:1,homes:[home]})[0];
   assert.equal(restored.costs.internet,80);
   assert.deepEqual(monthlyCost(restored),{total:2500,known:3,complete:true});
+});
+
+test('area-based property fees need area, preserve zero and never reinterpret legacy monthly amounts',()=>{
+  const home=newHome();home.community='花园小区';home.layout='三房';home.bathrooms='两卫';home.floor='12 / 26';home.area='100';
+  home.costs.rent=2600;home.costs.property=1.2;home.costs.parking=0;
+  assert.equal(propertyMonthlyCost(home),120);
+  assert.deepEqual(monthlyCost(home),{total:2720,known:3,complete:true});
+  const restored=validateBackup({format:'rental-notes',version:1,homes:[home]})[0];
+  assert.equal(restored.layout,'三房');assert.equal(restored.bathrooms,'两卫');assert.equal(restored.propertyFeeBasis,'area');
+  assert.equal(homeLabel(restored),'花园小区 · 三房 · 12 / 26层 · 两卫');
+  home.area='88.8';home.costs.property=1.23;assert.equal(propertyMonthlyCost(home),109.22);
+  for(const area of ['', '约100', '100㎡', '0', '-20', '1e2', 'Infinity', '1'+'0'.repeat(308)]){
+    home.area=area;home.costs.property=1.2;
+    assert.equal(propertyMonthlyCost(home),null,area);
+    assert.deepEqual(monthlyCost(home),{total:2600,known:2,complete:false});
+  }
+  home.costs.property=0;assert.equal(propertyMonthlyCost(home),0);
+  const legacy=structuredClone(restored);delete legacy.propertyFeeBasis;legacy.costs.property=120;
+  legacy.name='原房源标识';legacy.address='旧位置';legacy.link='https://example.com/home';legacy.contact='旧联系备注';legacy.visitDate='2026-11-18';
+  const imported=normalizeHome(legacy);
+  assert.equal(imported.propertyFeeBasis,'monthly');assert.equal(propertyMonthlyCost(imported),120);
+  for(const key of ['name','address','link','contact','visitDate'])assert.equal(imported[key],legacy[key]);
+  assert.throws(()=>normalizeHome({...home,propertyFeeBasis:'unknown'}));
+});
+
+test('on-site inspection covers every online prompt and keeps the same check IDs',()=>{
+  assert.equal(STAGES[0].name,'网上筛房');
+  const online=CHECKS.filter(c=>c.stages.includes(1)),onsite=CHECKS.filter(c=>c.stages.includes(2));
+  assert.ok(online.length>0);
+  for(const check of online){assert.ok(onsite.some(c=>c.id===check.id));assert.ok(checkDescription(check,1));assert.equal(checkDescription(check,2),check.how);}
+  assert.equal(onsite.length,35);
 });
 
 test('difference mode hides only unanimous positive answers for two to four homes',()=>{

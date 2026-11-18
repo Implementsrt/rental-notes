@@ -1,6 +1,6 @@
 export const STAGES = [
-  { id: 1, name: '快速筛房', short: '先筛选', title: '先确认，值不值得去看。', intro: '网上先问配置和费用；水压、排水、气味和手机网络，到场后再确认。', tip: '硬性条件不符合就先排除。承诺补齐的配置，签约时写明项目和日期。' },
-  { id: 2, name: '仔细验房', short: '再体验', title: '满意之后，把细节试一遍。', intro: '亲自开机、放水、开关门。软性条件结合自己的感受比较，不必追求每项都完美。', tip: '白天看采光，晚上听噪音。网上确认过的配置，现场仍要检查功能。' },
+  { id: 1, name: '网上筛房', short: '先筛选', title: '手机先浏览，再决定去看哪套。', intro: '先看图片、视频，向中介询问配置和费用。网上信息只用于初筛，房源描述可能与实际不符；到场后按“仔细验房”逐项核实并填写。', tip: '网上说符合，不等于现场已确认。未亲自核实的项目先保持未确认，承诺补齐的配置签约时写明项目和日期。' },
+  { id: 2, name: '仔细验房', short: '现场核实', title: '到场逐项核实，把实际情况记下来。', intro: '包含网上筛房的全部项目，重新核对朝向、配套和费用，再亲自开机、放水、开关门。按现场结果填写，发现与网上描述不符时及时修正。', tip: '白天看采光，晚上听噪音。网上确认过的配置也要现场复核；同一项目共用一份记录，以实际检查结果为准。' },
   { id: 3, name: '签约确认', short: '写清楚', title: '把口头承诺，变成明确约定。', intro: '费用、押金、退出条件、维修责任写清楚；交房时再共同拍照、抄表和签交接清单。', tip: '提前24小时通知、减免比例、住宿费用和解除门槛，均需双方协商写入合同。', reminder: { title: '向中介确认后续责任', paragraphs: [
     '房子发生问题后，中介是否继续协助处理、具体负责哪些事项，还是仅负责带看与成交，成交后不再跟进？',
     '如承诺继续负责，责任主体是中介公司还是经办个人？由谁联系、如何处理，是否有明确约定？',
@@ -59,7 +59,25 @@ export const CHECKS = [
   ['temporary_stay', '无法正常居住时的安排', 'contract', [3], '停用与退出', '明确免租期间、是否安排临时住宿、费用承担和上限。相关标准由双方协商。'],
   ['repeated_repair', '长期、反复维修的退出条件', 'contract', [3], '停用与退出', '约定连续或累计影响达到多少天可无责解约，剩余租金和押金何时退回。'],
   ['handover', '交付承诺与交房记录', 'contract', [3], '交付与交接', '补齐、维修、保洁的项目和日期写入合同；交房时共同拍照、抄表、签设备及已有损坏清单。'],
-].map(([id, label, kind, stages, group, how]) => ({ id, label, kind, stages, group, how }));
+].map(([id, label, kind, stages, group, how]) => ({ id, label, kind, stages: stages.includes(1) ? [1, 2] : stages, group, how }));
+
+const ONLINE_GUIDANCE = {
+  orientation: '查看户型图和实拍，询问主要卧室与客厅各自朝向、前方遮挡；到场再核实采光。',
+  closed_kitchen: '看图片或视频确认厨房是否有完整隔断和门，看不清就请对方补充；现场核对实际格局。',
+  balcony: '询问有无独立可用的阳台、位置及能否晾晒，到场核对使用范围。',
+  utilities: '先问水电单价、是否民用、是否独立计量和由谁收取，到场再核实账单。',
+  natural_gas: '问清天然气是否已开通可用，区分仅预留管道和瓶装气，到场再次确认。',
+  furniture: '请对方列明随房提供的床、空调和窗帘，缺失项目问清补齐日期，现场逐一核对。',
+  appliances: '询问冰箱、热水器和油烟机是否随房提供；洗衣机自带，到场再检查配套功能。',
+  washer: '先询问洗衣机位尺寸和进排水条件，现场再量尺寸、查插座及搬入通道。',
+  agency: '问清中介费金额、支付时间及额外服务费，现场再次确认，签约时留书面约定。',
+  dry: '询问有无漏水、发霉、返味及既往维修，照片与口头描述不能替代现场检查。',
+  pressure: '询问水压和热水是否稳定，到场再同时打开水龙头、持续放热水测试。',
+  toilet: '确认卫生间数量及马桶有无故障；两卫到场都要逐一试冲水、查渗水和返味。',
+  drain: '询问水池和地漏有无积水、堵塞或返味，到场放水验证排水情况。',
+  signal: '询问屋内手机信号与移动网络情况，到场关闭 Wi-Fi 后亲自测试。',
+};
+export const checkDescription = (check, stage) => stage === 1 ? ONLINE_GUIDANCE[check.id] || check.how : check.how;
 
 export const LABELS = {
   hard: { unknown: '未确认', pass: '符合', fail: '不符合', other: '其他' },
@@ -69,7 +87,7 @@ export const LABELS = {
 
 export const COSTS = [
   { id: 'rent', label: '房租', unit: '元/月', monthly: true },
-  { id: 'property', label: '物业费', unit: '元/月', monthly: true },
+  { id: 'property', label: '物业费', unit: '元/m²·月', monthly: true },
   { id: 'parking', label: '停车费', unit: '元/月', monthly: true },
   // Retain legacy values in drafts and backups; self-managed broadband is not a housing cost option.
   { id: 'internet', label: '宽带费', unit: '元/月', monthly: true, hidden: true },
