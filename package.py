@@ -13,7 +13,11 @@ def build_package(root, public_files=PUBLIC_FILES):
     output = root / 'rental-notes.zip'
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
         for filename in sorted(public_files):
-            archive.write(root / filename, filename)
+            if filename.endswith('.sh'):
+                # Windows checkouts may contain CRLF; Bash requires LF in Ubuntu.
+                archive.writestr(filename, (root / filename).read_text(encoding='utf-8-sig'))
+            else:
+                archive.write(root / filename, filename)
     findings = audit_archive(output, public_files)
     if findings:
         output.unlink()

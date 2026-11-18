@@ -39,7 +39,7 @@ class APITests(unittest.TestCase):
         self.assertEqual(self.client.get('/server.py').status_code,404)
 
     def test_all_frontend_modules_are_served(self):
-        for name in ['app.js','model.js','store.js','checklist.js','app.css','config.js','icon.svg']:
+        for name in ['app.js','model.js','store.js','checklist.js','connection.js','app.css','config.js','icon.svg']:
             result=self.client.get('/'+name)
             self.assertEqual(result.status_code,200,name)
             result.close()

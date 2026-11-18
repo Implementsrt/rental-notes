@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Keep Pages storage local to the browser
+      - name: Keep Pages local by default; backend comes from a private link
         run: |
           python - <<'PY'
           from pathlib import Path

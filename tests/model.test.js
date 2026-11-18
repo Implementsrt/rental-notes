@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CHECKS, STAGES, checkDescription } from '../web/checklist.js';
 import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML, isCommonPositive } from '../web/model.js';
 import { reconcile, acknowledge } from '../web/store.js';
+import { backendHash, resolveConnection, viewFromHash } from '../web/connection.js';
 
 test('unknown checks do not become failures',()=>{
   const home=newHome();
@@ -152,4 +153,46 @@ test('edits made during an in-flight save stay dirty after acknowledgement',()=>
   acknowledge(items,home.id,sent,1);
   assert.equal(items[home.id].revision,1);assert.equal(items[home.id].dirty,true);
   acknowledge(items,home.id,structuredClone(items[home.id]),2);assert.equal(items[home.id].dirty,false);
+});
+
+
+test('Pages stays local unless a backend is explicitly supplied in the fragment',()=>{
+  const page='https://example.github.io/rental-notes/';
+  assert.deepEqual(resolveConnection(page),{endpoint:null,fromLink:false,error:''});
+  assert.equal(resolveConnection(`${page}?api=https://backend.example#homes`).endpoint,null);
+  const linked=resolveConnection(page+backendHash('homes','https://backend.example:8443'));
+  assert.deepEqual(linked,{endpoint:'https://backend.example:8443',fromLink:true,error:''});
+  assert.equal(new URL(page+backendHash('homes',linked.endpoint)).search,'');
+  assert.equal(resolveConnection(`${page}#homes?api=https%3A%2F%2F203.0.113.10%3A443%2F`).endpoint,'https://203.0.113.10');
+});
+
+test('fragment routes and backend addresses survive navigation and reload',()=>{
+  for(const view of ['guide','homes','compare']){
+    const hash=backendHash(view,'https://backend.example');
+    assert.equal(viewFromHash(hash),view);
+    assert.equal(resolveConnection('https://example.github.io/'+hash).endpoint,'https://backend.example');
+  }
+  assert.equal(viewFromHash('#unknown?api=anything'),'guide');
+  assert.equal(backendHash('unknown'),'#guide');
+  assert.equal(viewFromHash('#homes'),'homes');
+});
+
+test('backend links reject insecure or ambiguous targets and embedded credentials',()=>{
+  const invalid=['http://203.0.113.10','//backend.example','javascript:alert(1)','file:///tmp/data','ftp://backend.example','https://backend.example/api','https://backend.example/?token=value','https://backend.example/#token','', 'https://', 'https://backend.example?'];
+  const withCredentials=new URL('https://backend.example');withCredentials.username='user';withCredentials.password='test';invalid.push(withCredentials.href);
+  for(const target of invalid){
+    const result=resolveConnection(`https://example.github.io/#homes?api=${encodeURIComponent(target)}`);
+    assert.equal(result.endpoint,null,target);
+    assert.equal(result.fromLink,true,target);
+    assert.ok(result.error,target);
+  }
+  assert.ok(resolveConnection('https://example.github.io/#homes?api=https://first.example&api=https://second.example').error);
+});
+
+test('HTTP is allowed only between loopback origins during local development',()=>{
+  assert.equal(resolveConnection('http://127.0.0.1:8766/#homes?api=http://127.0.0.1:8877').endpoint,'http://127.0.0.1:8877');
+  assert.ok(resolveConnection('https://example.github.io/#homes?api=http://127.0.0.1:8877').error);
+  assert.ok(resolveConnection('http://127.0.0.1:8766/#homes?api=http://203.0.113.10').error);
+  assert.equal(resolveConnection('http://127.0.0.1:8765/', '').endpoint,'http://127.0.0.1:8765');
+  assert.equal(resolveConnection('https://example.github.io/', 'https://backend.example/').endpoint,'https://backend.example');
 });

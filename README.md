@@ -2,7 +2,7 @@
 
 网上筛房提示、现场验房与签约记录，以及2至4套房并排对比。适合个人使用，支持手机和电脑。
 
-[在线使用看房手记](https://implementsrt.github.io/rental-notes/)。GitHub Pages持续保留，`main`维护浏览器本地工具版，房源保存在各设备的浏览器中，不连接云端服务器。
+[在线使用看房手记](https://implementsrt.github.io/rental-notes/)。GitHub Pages持续保留，`main`共用同一套前后端代码。普通链接默认把房源保存在当前浏览器；也可用私有链接指定自己的HTTPS后端，确认地址并登录后跨设备同步。
 
 导出记录：点击右上角“数据与同步 → 导出备份”，下载包含全部房源信息、费用、检查结果和备注的JSON文件。更换设备、浏览器、网址或迁移到未来服务器版时，再通过“导入备份”恢复；导入不静默覆盖已有记录。导出的个人房源文件请自行保存，不提交到源码仓库。
 
@@ -88,11 +88,84 @@ sudo journalctl -u rental-notes -n 50 --no-pager
 
 服务使用1个进程、2个线程。数据库启用WAL并为每次请求使用独立连接。数据保留在程序目录之外，更新安装不覆盖已有密码或数据库。
 
-## 3. Pages与后续服务器分支
+## 3. 命令行连接与私有配置
 
-现有GitHub Pages继续作为本地小工具使用，不删除。`.github/workflows/pages.yml`仅从`main`发布`web/`，固定生成`apiBase: null`，不读取`RENT_API_BASE`等服务器地址变量。房源保存在浏览器中，手机和电脑之间通过JSON导出/导入迁移。
+优先使用Workbench CLI执行远程命令和传输文件。由用户在自己的终端执行`workbench config`完成云凭证配置；默认文件为`%USERPROFILE%\.workbench\config.json`，实例地域、实例ID及其他私有部署信息也保存在仓库外。它支持有公网IP或无公网IP的Linux实例，连接前需核对云助手状态和RAM权限。此通道用于运维，网站访问仍需单独配置公网入口。
 
-用户后续会自行新建分支开展服务器构建和部署，方案与实际服务器配置在该分支继续确认。当前仓库中的Flask/SQLite后端、安装脚本、systemd服务、备份及Nginx示例保留作为后续基础，不表示已部署或已配置公网访问。不要在维护`main`时启动服务器部署或修改现有Pages用途。
+Windows官方安装脚本若因写入`C:\Program Files\workbench`被拒绝，可将官方Windows发行包通过SHA256校验后安装到`%LOCALAPPDATA%\Programs\workbench`并添加到用户PATH，无需更改系统目录权限。用户目录安装后，当前终端尚未更新PATH时，可直接执行：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\workbench\workbench.exe" version
+& "$env:LOCALAPPDATA\Programs\workbench\workbench.exe" config
+```
+
+参考[Workbench CLI安装与凭证配置](https://help.aliyun.com/zh/ecs/user-guide/install-and-configure-workbench-cli-credentials)及[实例管理命令](https://help.aliyun.com/zh/ecs/user-guide/use-workbench-cli-to-manage-ecs-instances)。代理后续先做只读检查，再按实际服务器状态部署；不读取或输出凭据文件内容。
+
+备用的SSH远程操作使用本机OpenSSH的`ssh`和`scp`。实际连接配置、私钥和部署笔记保存在仓库外；公开仓库只保留以下占位模板。直接SSH连接需要服务器地址、SSH端口、系统用户名和对应的登录凭据，无需为此提供阿里云AccessKey。服务器安全组和防火墙需允许当前客户端访问实际SSH端口。
+
+在Windows的`%USERPROFILE%\.ssh\config`中添加下列配置；该文件名没有扩展名。将占位符替换为真实值，端口按实际环境填写，`IdentityFile`指向仓库外的私钥文件：
+
+```sshconfig
+Host rental-notes-prod
+    HostName YOUR_SERVER_IP
+    User YOUR_SSH_USER
+    Port 22
+    IdentityFile ~/.ssh/rental-notes-prod
+    IdentitiesOnly yes
+    ForwardAgent no
+    ConnectTimeout 10
+```
+
+该私钥对应的公钥需要已配置到服务器相应用户。已有密钥时直接使用其实际文件路径，不覆盖现有密钥。用户先在自己的终端执行`ssh rental-notes-prod`，通过阿里云控制台等独立渠道核对主机指纹后接受并保存到本机`known_hosts`，同时自行处理密码、密钥口令或其他交互认证。不要通过关闭主机密钥检查绕过首次核验。
+
+如果私钥设有口令，可由用户在本机将其加载到Windows的`ssh-agent`，让后续命令复用认证。尚未启用代理服务时，先在管理员PowerShell执行：
+
+```powershell
+Set-Service -Name ssh-agent -StartupType Manual
+Start-Service ssh-agent
+```
+
+再在当前Windows用户的普通终端中执行，并自行输入密钥口令：
+
+```powershell
+ssh-add "$env:USERPROFILE\.ssh\rental-notes-prod"
+```
+
+`Manual`表示重启后可能需要重新启动服务。若使用其他私钥路径，调整上述命令。用户在单独终端完成一次密码登录，并不会让代理的后续独立命令自动获得登录状态；后续需要可用的密钥或SSH代理。仅有密码登录时，用户可先自行配置公钥认证。
+
+认证就绪后，可在项目目录用下列命令验证非交互连接、上传公开安装包；上传不执行安装：
+
+```powershell
+ssh -o BatchMode=yes -o StrictHostKeyChecking=yes rental-notes-prod "echo connected"
+python package.py
+scp -o BatchMode=yes -o StrictHostKeyChecking=yes rental-notes.zip rental-notes-prod:rental-notes.zip
+```
+
+`BatchMode=yes`会在需要交互认证时直接失败，不等待输入密码或口令。若连接配置放在其他仓库外位置，可给`ssh`和`scp`加`-F "配置文件绝对路径"`。提供本地配置路径及主机别名即可继续操作，不必在聊天中提供凭据内容。现有`deploy/windows-install.ps1`仍按IPv4与用户名交互安装；使用主机别名时直接采用上述`ssh`、`scp`命令。
+
+连通后先只读核对Linux版本、当前用户及sudo权限、端口占用、已有Nginx站点和服务、目标目录是否已有数据，再按实际状态制定部署步骤。sudo、应用初始密码等交互由用户在自己的终端处理，或者使用已具备相应权限的部署账户；不将密码写进命令、源码或日志。生产环境配置和数据库继续分别保存在`/etc/rental-notes.env`与`/var/lib/rental-notes/`。
+
+连接方式参考[阿里云OpenSSH连接说明](https://help.aliyun.com/zh/ecs/user-guide/connect-to-an-instance-by-using-third-party-client-tools/)、[Windows OpenSSH配置](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh-server-configuration)和[Windows密钥与ssh-agent管理](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_keymanagement)。
+
+## 4. Pages与服务器部署
+
+现有GitHub Pages继续保留，普通链接默认使用浏览器本地保存。`.github/workflows/pages.yml`仅从`main`发布`web/`，固定生成`apiBase: null`，不读取`RENT_API_BASE`等服务器地址变量。公开源码及Pages产物不包含真实后端地址。
+
+需要同步时，将自己的后端地址放在URL片段的`api`参数中，例如下面的保留示例IP（不是可连接的服务器）：
+
+```text
+https://implementsrt.github.io/rental-notes/#homes?api=https%3A%2F%2F203.0.113.10
+```
+
+`#`后的内容由浏览器读取，不随页面请求发给GitHub。首次在当前标签页选择该服务器时，会先显示完整地址；确认前不连接、不发送密码或令牌。确认后可在“数据与同步”查看目标并登录，或返回本地模式。导航、刷新及同一标签页内的页面切换会保留后端地址；改为其他地址时重新核对目标。普通`?api=`查询参数不会启用同步。
+
+链接只能提供完整的HTTPS源地址（协议、主机和可选端口），不接受账号密码、路径、查询串或额外片段。HTTP仅允许本机HTTP页面连接本机回环地址以便开发。后端必须提供浏览器信任的证书；不要依赖关闭证书校验或浏览器安全限制。
+
+后端设置`RENT_ALLOWED_ORIGINS=https://implementsrt.github.io`，允许该Pages来源的跨域请求；来源不包含仓库路径。密码和令牌不放进链接。带真实IP的书签、本地配置和部署笔记放在仓库外；获得链接的人仍然能看到目标地址，服务器仍需鉴权。
+
+纯本地模式与不同服务器的草稿分别保存在原有独立存储键中，不自动复制或覆盖。迁移已有记录前先导出JSON，再在目标模式导入；原有冲突副本与版本校验继续保留。
+
+服务器开发与部署直接在`main`继续，不要求新建服务器分支；共用同一套前端和已有Flask/SQLite后端，避免重复维护。Pages与服务器通过运行环境和显式链接选择配置：Pages默认本地保存，私有链接可指定后端；服务器直接提供页面时使用同源API。仓库中的安装脚本、systemd服务、备份及Nginx示例作为部署基础；实际运行状态与接入信息记录在仓库外，不能根据源码存在推断公网可用。修改部署代码时继续保留现有Pages用途，实际连接资料与运行凭据始终放在仓库外。
 
 后续整站部署可由Nginx统一提供HTTPS入口，转发到仅监听回环地址的Gunicorn；服务器直接提供页面时，`/config.js`自动选择同源API。启用代理时需按实际环境配置`RENT_TRUST_PROXY`，保留已有无关服务。不同服务地址的数据分开存放，迁移前先导出本地JSON备份。
 
@@ -141,6 +214,6 @@ python -m unittest discover -s tests -v
 node --test tests/model.test.js
 ```
 
-Python检查需使用已安装Flask的虚拟环境。Node仅用于本地模型检查，服务器运行不需要。范围包括身份认证、跨域、版本冲突、删除冲突、持久化、金额校验、备份、未知值处理、历史备注和发布文件检查。发布前执行python publication.py；打包执行python package.py。
+Python检查需使用已安装Flask的虚拟环境。Node仅用于本地模型与连接参数检查，服务器运行不需要。范围包括默认本地模式、片段路由与地址校验、身份认证、跨域、版本冲突、删除冲突、持久化、金额校验、备份、未知值处理、历史备注和发布文件检查。发布前执行python publication.py；打包执行python package.py，安装包中的Bash脚本统一使用LF换行以兼容Ubuntu。
 
 第一版保存文字、数值和备注，不含照片上传、多人账户、自定义检查项编辑或自动排名。静态资源没有外部字体、CDN脚本或运行时前端依赖。

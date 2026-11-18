@@ -8,14 +8,14 @@ import re
 import zipfile
 
 PUBLIC_FILES = (
-    '.gitignore', '.github/workflows/pages.yml', 'AGENTS.md', 'HANDOFF.md',
+    '.gitattributes', '.gitignore', '.github/workflows/pages.yml', 'AGENTS.md', 'HANDOFF.md',
     'PUBLICATION_REVIEW.md', 'README.md', 'package.json', 'package.py',
     'publication.py', 'requirements.txt', 'server.py',
     'deploy/backup_daily.py', 'deploy/install.sh', 'deploy/nginx.example.conf',
     'deploy/rental-notes-backup.service', 'deploy/rental-notes-backup.timer',
     'deploy/rental-notes.service', 'deploy/windows-install.ps1',
     'tests/model.test.js', 'tests/test_api.py', 'tests/test_publication.py',
-    'web/app.css', 'web/app.js', 'web/checklist.js', 'web/config.js',
+    'web/app.css', 'web/app.js', 'web/checklist.js', 'web/config.js', 'web/connection.js',
     'web/icon.svg', 'web/index.html', 'web/model.js', 'web/store.js',
 )
 PRIVATE_DIRS = {'.git', '.venv', '__pycache__', 'data', 'test-results',

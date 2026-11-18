@@ -1,12 +1,41 @@
 import { STAGES, CHECKS, LABELS, COSTS, checkDescription } from './checklist.js';
 import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, validateBackup, homeLabel, floorLabel, communityNames, noteHistory, escapeHTML as esc, uuid, isCommonPositive } from './model.js';
 import { reconcile, acknowledge } from './store.js';
+import { backendHash, resolveConnection, viewFromHash } from './connection.js';
 
-const API_BASE = window.RENT_CONFIG?.apiBase ?? null;
-const ENDPOINT = API_BASE === null ? null : new URL(API_BASE || location.origin).href.replace(/\/$/, '');
+const $ = selector => document.querySelector(selector);
+const connection = resolveConnection(location.href, window.RENT_CONFIG?.apiBase ?? null);
+let connectionNotice = '';
+const ENDPOINT = await chooseEndpoint(connection);
+const LINK_ENDPOINT = connection.fromLink && ENDPOINT ? ENDPOINT : null;
 const STORAGE_KEY = `rental-notes:v1:${ENDPOINT || 'local'}`;
 const TOKEN_KEY = `${STORAGE_KEY}:session`;
-const $ = selector => document.querySelector(selector);
+
+function clearBackendLink() {
+  history.replaceState(null, '', `${location.pathname}${location.search}${backendHash(viewFromHash(location.hash))}`);
+}
+
+async function chooseEndpoint(candidate) {
+  if (candidate.error) {
+    connectionNotice = `${candidate.error}。已保持本地模式，没有连接服务器。`;
+    clearBackendLink();
+    return null;
+  }
+  if (!candidate.fromLink) return candidate.endpoint;
+  const approvalKey = `rental-notes:v1:${candidate.endpoint}:approved`;
+  let approved = false;
+  try { approved = sessionStorage.getItem(approvalKey) === '1'; } catch {}
+  if (!approved) {
+    approved = await askConfirm('启用服务器同步？', `将连接到：\n${candidate.endpoint}\n请核对这是你自己的服务器。确认后才会向该地址发送登录信息和同步请求。\n服务器草稿与纯本地记录分开保存；已有记录请通过 JSON 导出、导入迁移。`, '确认此服务器', {cancelLabel:'继续本地使用', danger:false});
+    if (approved) { try { sessionStorage.setItem(approvalKey, '1'); } catch {} }
+  }
+  if (!approved) { clearBackendLink(); return null; }
+  return candidate.endpoint;
+}
+
+for (const link of document.querySelectorAll('a[href^="#"]')) {
+  link.setAttribute('href', backendHash(viewFromHash(link.hash), LINK_ENDPOINT));
+}
 const money = value => value === null || value === undefined ? '待确认' : `¥${Number(value).toLocaleString('zh-CN', {maximumFractionDigits: 2})}`;
 const DECISIONS = {pending:'待考虑', shortlist:'意向房源', eliminated:'已排除', chosen:'已选定'};
 let items = {}, token = '', loadError = null, persistenceError = false, busy = false, lastSync = '', syncError = '';
@@ -209,7 +238,7 @@ function selectHome(id, selected) {
 function renderTray() {
   const slot = $('#compare-tray-slot');
   if (!slot) return;
-  slot.innerHTML = state.selected.size ? `<div class="compare-tray"><span>已选 ${state.selected.size} 套房源</span><div><button class="text-button" id="clear-selected">清空</button><a class="button" href="#compare">并排对比 →</a></div></div>` : '';
+  slot.innerHTML = state.selected.size ? `<div class="compare-tray"><span>已选 ${state.selected.size} 套房源</span><div><button class="text-button" id="clear-selected">清空</button><a class="button" href="${backendHash('compare', LINK_ENDPOINT)}">并排对比 →</a></div></div>` : '';
   if ($('#clear-selected')) $('#clear-selected').onclick = () => {state.selected.clear(); renderHomeResults(); updateStatus();};
 }
 function renderCompare() {
@@ -222,7 +251,7 @@ function renderCompare() {
   const checkSection = (kind, title) => checks.some(c => c.kind === kind) ? category(title) + checksRows(kind) : '';
   app.innerHTML = `${heading('SIDE BY SIDE, CLEARER CHOICES', '放在一起，差别更清楚。', '硬性看是否符合，软性看实际感受。未确认项不会当作不符合。')}${sampleBanner()}
   ${homes.length ? `<div class="compare-picker" aria-label="选择对比房源">${homes.map(h => `<label class="pick-pill ${state.selected.has(h.id) ? 'selected' : ''}"><input type="checkbox" data-pick="${h.id}" ${state.selected.has(h.id) ? 'checked' : ''}>${esc(homeLabel(h))}</label>`).join('')}</div>` : ''}
-  ${selected.length < 2 ? `<div class="empty-state"><div class="empty-illustration">${HOUSE}</div><h2>${homes.length ? '选两套房，开始比较。' : '有了记录，才有比较。'}</h2><p>选择2至4套房源，并排查看费用、硬性条件、<br>居住体验与签约待确认事项。</p><div class="empty-actions"><a class="button primary" href="#homes">${homes.length ? '去房源列表选择' : '去记录房源'} →</a>${!homes.length ? '<button class="text-button" id="compare-demo">查看示例对比 ↗</button>' : ''}</div></div>` : `<div class="compare-controls"><div class="filters" role="group" aria-label="对比显示方式"><button data-compare-filter="all" aria-pressed="${!state.differencesOnly}" class="${!state.differencesOnly?'active':''}">全部项目</button><button data-compare-filter="differences" aria-pressed="${state.differencesOnly}" class="${state.differencesOnly?'active':''}">差异项</button></div><p class="form-hint">${state.differencesOnly ? `已隐藏 ${CHECKS.length-checks.length} 项全部为“符合 / 满意 / 已明确”的核对项。` : '差异项仅隐藏全部房源都为“符合 / 满意 / 已明确”的核对项。'}未确认、未评估及不符合等结果保留。</p></div><p class="form-hint">左右滑动查看其他房源，纵向滚动查看更多指标。</p><div class="comparison-scroll" tabindex="0" aria-label="房源对比表，可横向滚动"><table class="comparison-table" style="min-width:${170 + selected.length * 245}px"><thead><tr><th scope="col">对比项目</th>${selected.map(h => `<th scope="col">${esc(homeLabel(h))}<div class="cell-note">${DECISIONS[h.decision]}</div></th>`).join('')}</tr></thead><tbody>
+  ${selected.length < 2 ? `<div class="empty-state"><div class="empty-illustration">${HOUSE}</div><h2>${homes.length ? '选两套房，开始比较。' : '有了记录，才有比较。'}</h2><p>选择2至4套房源，并排查看费用、硬性条件、<br>居住体验与签约待确认事项。</p><div class="empty-actions"><a class="button primary" href="${backendHash('homes', LINK_ENDPOINT)}">${homes.length ? '去房源列表选择' : '去记录房源'} →</a>${!homes.length ? '<button class="text-button" id="compare-demo">查看示例对比 ↗</button>' : ''}</div></div>` : `<div class="compare-controls"><div class="filters" role="group" aria-label="对比显示方式"><button data-compare-filter="all" aria-pressed="${!state.differencesOnly}" class="${!state.differencesOnly?'active':''}">全部项目</button><button data-compare-filter="differences" aria-pressed="${state.differencesOnly}" class="${state.differencesOnly?'active':''}">差异项</button></div><p class="form-hint">${state.differencesOnly ? `已隐藏 ${CHECKS.length-checks.length} 项全部为“符合 / 满意 / 已明确”的核对项。` : '差异项仅隐藏全部房源都为“符合 / 满意 / 已明确”的核对项。'}未确认、未评估及不符合等结果保留。</p></div><p class="form-hint">左右滑动查看其他房源，纵向滚动查看更多指标。</p><div class="comparison-scroll" tabindex="0" aria-label="房源对比表，可横向滚动"><table class="comparison-table" style="min-width:${170 + selected.length * 245}px"><thead><tr><th scope="col">对比项目</th>${selected.map(h => `<th scope="col">${esc(homeLabel(h))}<div class="cell-note">${DECISIONS[h.decision]}</div></th>`).join('')}</tr></thead><tbody>
   ${category('基本情况与费用')}${row('小区',h=>esc(h.community || '待填写'))}${row('房型',h=>esc(h.layout || '待填写'))}${row('楼层',h=>esc(floorLabel(h) || '待填写'))}${row('卫生间',h=>esc(h.bathrooms || '待填写'))}${row('面积',h=>esc(h.area ? h.area+'㎡' : '未填写'))}${COSTS.filter(c=>!c.hidden).map(c=>row(c.label+(c.monthly&&c.id!=='property'?' / 月':''),h=>money(h.costs[c.id])+(c.id==='property'&&h.costs.property!==null?` / ${h.propertyFeeBasis==='area'?'m²·月':'月（旧记录）'}`:''))).join('')}${row('固定月支出',h=>{const c=monthlyCost(h);return c.known ? `${c.complete?'':'至少 '}${money(c.total)}${c.complete?'':'<div class="cell-note">部分费用或物业计费面积待填；不含水电气等用量费用</div>'}`:'待确认';})}${checkSection('hard','硬性条件')}${checkSection('soft','软性评估')}${checkSection('contract','签约责任')}${category('其他记录')}${row('综合备注',h=>`<div class="cell-note">${esc(h.notes || '暂无备注')}</div>`)}</tbody></table></div><p class="compare-note">手机可左右滑动表格。物业月费按单价×面积计算；旧记录按原每月金额计算。空白费用或缺少计费面积均保持待确认，押金不计入月支出。</p>`}`;
   app.querySelectorAll('[data-pick]').forEach(input => input.onchange = () => {selectHome(input.dataset.pick,input.checked);renderCompare();});
   app.querySelectorAll('[data-compare-filter]').forEach(button => button.onclick = () => {state.differencesOnly=button.dataset.compareFilter==='differences';renderCompare();});
@@ -354,10 +383,10 @@ function renderEditorPanel() {
 editor.addEventListener('cancel',event=>{if(!editorInputsValid())event.preventDefault();});
 editor.addEventListener('close',()=>{state.editing=null;render();if(token)sync();});
 
-function askConfirm(title, text, action) {
+function askConfirm(title, text, action, {cancelLabel='取消', danger=true}={}) {
   return new Promise(resolve=>{
     const dialog=$('#confirm-dialog');
-    dialog.innerHTML=`<div class="confirm-body"><h2 id="confirm-title">${esc(title)}</h2><p style="margin-top:14px">${esc(text)}</p><div class="confirm-actions"><button class="button" id="confirm-cancel">取消</button><button class="button danger" id="confirm-yes">${esc(action)}</button></div></div>`;
+    dialog.innerHTML=`<div class="confirm-body"><h2 id="confirm-title">${esc(title)}</h2><p style="margin-top:14px">${esc(text)}</p><div class="confirm-actions"><button class="button" id="confirm-cancel">${esc(cancelLabel)}</button><button class="button ${danger?'danger':'primary'}" id="confirm-yes">${esc(action)}</button></div></div>`;
     let accepted=false;
     $('#confirm-cancel').onclick=()=>dialog.close();
     $('#confirm-yes').onclick=()=>{accepted=true;dialog.close();};
@@ -380,9 +409,11 @@ function exportHomes() {
 }
 function renderSettings() {
   settings.innerHTML=`<div class="dialog-header"><div><h2 id="settings-title">数据与同步</h2><p>保留自己的记录，也留一份备份。</p></div><button class="icon-button" id="close-settings" aria-label="关闭数据设置">×</button></div><div class="settings-body"><section class="settings-section"><h3>当前记录</h3><div class="sync-detail">${actualHomes().length} 套房源 · ${ENDPOINT?'本机草稿＋服务器同步':'保存在当前设备的浏览器'}${lastSync?`<br>最近同步 ${lastSync}`:''}</div><p class="small-note">${ENDPOINT?'离线修改会先保存在本机，重新联网并登录后再同步。':'清除网站数据或更换浏览器不会保留本机记录，请定期导出备份。'}</p></section>
+  ${ENDPOINT?`<section class="settings-section"><h3>连接的服务器</h3><p class="connection-address">${esc(ENDPOINT)}</p>${LINK_ENDPOINT?'<p class="small-note">返回本地模式后，这里的草稿仍会保留；再次使用同一服务器链接即可继续。</p><button class="button" id="use-local">返回本地模式</button>':''}</section>`:''}
   ${ENDPOINT?`<section class="settings-section"><h3>跨设备同步</h3>${token?`<p>${syncError?esc(syncError):'已登录。其他设备登录同一服务器后，可查看和修改这些房源。'}</p><div class="settings-actions"><button class="button primary" id="sync-now">立即同步</button><button class="button" id="logout">退出登录</button></div>`:`<p>输入部署时设置的个人密码。未登录期间的记录会先保存在本机。</p><form id="login-form"><label class="form-field"><span>个人登录密码</span><input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></label><div class="settings-actions"><button class="button primary" type="submit" id="login-submit">登录并同步</button></div><p id="login-error" class="inline-error" role="alert"></p></form>`}</section>`:''}
   <section class="settings-section"><h3>导出与恢复</h3><p>导出文件包含房源指标、费用和备注，不包含登录凭据。导入时保留已有记录；相同ID内容不同的房源会作为副本添加。</p><div class="settings-actions"><button class="button" id="export">↓ 导出备份</button><button class="button" id="import">↑ 导入备份</button></div></section></div>`;
   $('#close-settings').onclick=()=>settings.close();$('#export').onclick=exportHomes;$('#import').onclick=()=>$('#import-file').click();
+  if($('#use-local')) $('#use-local').onclick=async()=>{if(await askConfirm('返回本地模式？','当前服务器草稿会保留。返回后将显示此前的纯本地记录；需要迁移请先导出 JSON 备份。','返回本地模式',{danger:false})){clearBackendLink();location.reload();}};
   if($('#login-form')) $('#login-form').onsubmit=async event=>{
     event.preventDefault();const password=$('#login-password').value;$('#login-submit').disabled=true;$('#login-error').textContent='';
     try {const result=await request('/api/login',{method:'POST',body:JSON.stringify({password})});token=result.token;sessionStorage.setItem(TOKEN_KEY,token);await sync();renderSettings();toast(syncError?'已登录，记录等待同步':'已登录并完成同步');}
@@ -420,7 +451,11 @@ const samples=[0,1,2].map(index=>{
   return home;
 });
 function enableDemo(){state.demo=true;state.filter='all';state.search='';state.selected=new Set(samples.slice(0,2).map(h=>h.id));render();toast('已进入示例模式，示例不会保存到你的记录');}
-function route(){const view=location.hash.slice(1);state.view=['guide','homes','compare'].includes(view)?view:'guide';render();window.scrollTo({top:0,behavior:'instant'});}
+function route(){
+  const next = resolveConnection(location.href);
+  if (next.error || next.endpoint !== LINK_ENDPOINT) { location.reload(); return; }
+  state.view=viewFromHash(location.hash);render();window.scrollTo({top:0,behavior:'instant'});
+}
 window.addEventListener('hashchange',route);
 window.addEventListener('online',sync);
 window.addEventListener('focus',()=>{if(!editor.open)sync();});
@@ -453,4 +488,4 @@ window.addEventListener('storage',event=>{
   }
 });
 setInterval(()=>{if(!editor.open&&!settings.open)sync();},30000);
-route();if(token)sync();
+route();if(connectionNotice)toast(connectionNotice,true);if(token)sync();

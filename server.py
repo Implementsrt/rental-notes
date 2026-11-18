@@ -235,7 +235,7 @@ def create_app(test_config=None):
     @app.get('/')
     @app.get('/<path:filename>')
     def frontend(filename='index.html'):
-        if filename not in {'index.html', 'app.js', 'app.css', 'model.js', 'store.js', 'checklist.js', 'icon.svg'}:
+        if filename not in {'index.html', 'app.js', 'app.css', 'model.js', 'store.js', 'checklist.js', 'connection.js', 'icon.svg'}:
             return jsonify(error='Not found'), 404
         return send_from_directory(WEB, filename)
 

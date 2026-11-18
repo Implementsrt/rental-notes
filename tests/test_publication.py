@@ -26,6 +26,15 @@ class PublicationTests(unittest.TestCase):
         with zipfile.ZipFile(build_package(self.root, self.manifest)) as archive:
             self.assertEqual(set(archive.namelist()), set(self.manifest))
 
+    def test_bash_scripts_are_packaged_with_unix_newlines_from_windows(self):
+        (self.root/'deploy').mkdir()
+        script = self.root/'deploy/install.sh'
+        script.write_bytes(b'#!/usr/bin/env bash\r\nset -euo pipefail\r\n')
+        manifest = self.manifest + ('deploy/install.sh',)
+        with zipfile.ZipFile(build_package(self.root, manifest)) as archive:
+            self.assertEqual(archive.read('deploy/install.sh'),
+                             b'#!/usr/bin/env bash\nset -euo pipefail\n')
+
     def test_secret_values_block_packaging_without_printing_the_value(self):
         generated_example = 'sk-' + 'A' * 40
         (self.root/'web/app.js').write_text(generated_example, encoding='utf-8')
