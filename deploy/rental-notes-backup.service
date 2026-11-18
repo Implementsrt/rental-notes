@@ -1,0 +1,15 @@
+[Unit]
+Description=Consistent daily backup of Rental Notes
+
+[Service]
+Type=oneshot
+User=rental-notes
+Group=rental-notes
+WorkingDirectory=/opt/rental-notes
+EnvironmentFile=/etc/rental-notes.env
+ExecStart=/opt/rental-notes/.venv/bin/python /opt/rental-notes/deploy/backup_daily.py
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rental-notes

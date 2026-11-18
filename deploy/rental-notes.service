@@ -1,0 +1,24 @@
+[Unit]
+Description=Rental Notes personal notebook
+After=network.target
+
+[Service]
+Type=simple
+User=rental-notes
+Group=rental-notes
+WorkingDirectory=/opt/rental-notes
+EnvironmentFile=/etc/rental-notes.env
+ExecStart=/opt/rental-notes/.venv/bin/gunicorn --bind 127.0.0.1:8877 --workers 1 --threads 2 --timeout 30 --access-logfile - server:create_app()
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/rental-notes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

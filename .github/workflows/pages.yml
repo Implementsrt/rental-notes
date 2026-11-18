@@ -1,0 +1,45 @@
+name: Publish frontend to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set optional HTTPS API address
+        env:
+          RENT_API_BASE: ${{ vars.RENT_API_BASE }}
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          base = os.environ.get('RENT_API_BASE', '').strip().rstrip('/')
+          if base and (urlsplit(base).scheme != 'https' or not urlsplit(base).hostname):
+              raise SystemExit('RENT_API_BASE must be an HTTPS address')
+          Path('web/config.js').write_text('window.RENT_CONFIG = ' + json.dumps({'apiBase': base or None}) + ';\n')
+          PY
+      - name: Check publication contents
+        run: python publication.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
