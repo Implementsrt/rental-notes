@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CHECKS, STAGES, DEFAULT_COMMUNITIES, checkDescription } from '../web/checklist.js';
 import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, updateRentCosts, validateBackup, homeLabel, communityNames, noteHistory, escapeHTML, isCommonPositive } from '../web/model.js';
-import { reconcile, acknowledge } from '../web/store.js';
+import { reconcile, acknowledge, restoreStoredItems, mergeBackup } from '../web/store.js';
 import { backendHash, resolveConnection, viewFromHash } from '../web/connection.js';
 
 test('unknown checks do not become failures',()=>{
@@ -149,6 +149,66 @@ test('import normalizes unknown keys and rejects malformed amounts and files',()
   for(const id of ['natural_gas','balcony_privacy','parking_position','ac_efficiency','door_lock','entrance_gates','traffic_separation','ebike_access'])assert.deepEqual(getCheck(imported,id),{status:'unknown',note:''});
   home.costs.rent=-1;assert.throws(()=>normalizeHome(home));
   assert.throws(()=>validateBackup({homes:[]}));
+});
+test('missing local IDs reuse an existing identity or get a stable, distinct UUID',()=>{
+  const existing = newHome();
+  const embedded = newHome();
+  const updatedAt = '2026-11-18T03:00:00Z';
+  const existingRecord = {data:{community:'同名小区', updatedAt}, revision:4, deleted:false, dirty:false, modifiedAt:123};
+  const stored = {version:1, items:{
+    [existing.id]:existingRecord,
+    'legacy-embedded':{...existingRecord, data:{id:embedded.id, community:'同名小区', updatedAt}},
+    'legacy-missing':{...existingRecord, data:{community:'同名小区', updatedAt}},
+    'legacy-duplicate':{...existingRecord, data:{id:existing.id, community:'同名小区', updatedAt}},
+  }};
+  const repaired = restoreStoredItems(stored, true);
+  assert.equal(repaired.repaired, true);
+  assert.equal(Object.keys(repaired.items).length, 4);
+  assert.equal(repaired.items[existing.id].revision, 4);
+  assert.equal(repaired.items[embedded.id].revision, 4);
+  for (const [id, item] of Object.entries(repaired.items)) {
+    assert.equal(id, item.data.id);
+    assert.equal(item.data.updatedAt, updatedAt);
+    if (id !== existing.id && id !== embedded.id) {
+      assert.equal(item.revision, 0);
+      assert.equal(item.dirty, true);
+    }
+  }
+  const reloaded = restoreStoredItems(JSON.parse(JSON.stringify({version:1, items:repaired.items})), true);
+  assert.equal(reloaded.repaired, false);
+  assert.deepEqual(reloaded.items, repaired.items);
+});
+test('backup import overwrites only strictly newer versions of the same ID',()=>{
+  const existing = {...newHome(), community:'同名小区', notes:'原备注', updatedAt:'2026-11-17T00:00:00Z'};
+  const unrelated = {...existing, id:newHome().id};
+  const changed = {...existing, notes:'新备注', updatedAt:'2026-11-19T00:00:00Z'};
+  const older = {...existing, notes:'旧备注', updatedAt:'2026-11-16T00:00:00Z'};
+  const items = {[existing.id]:{data:existing, revision:7, deleted:false, dirty:false, modifiedAt:250}};
+  assert.deepEqual(mergeBackup(items, [changed, unrelated, older], true, 200), {added:1, updated:1, skipped:1});
+  assert.deepEqual(items[existing.id], {data:changed, revision:7, deleted:false, dirty:true, modifiedAt:251});
+  assert.deepEqual(mergeBackup(items, [older, changed, {...changed, notes:'同一时间的其他备注'}]), {added:0, updated:0, skipped:3});
+  assert.equal(items[existing.id].data.notes, '新备注');
+  assert.equal(items[unrelated.id].data.notes, '原备注');
+});
+test('backup import never treats a missing edit date as the time of import',()=>{
+  const existing = {...newHome(), updatedAt:'2026-11-18T00:00:00Z'};
+  const backup = validateBackup({format:'rental-notes', version:1, homes:[{...existing, updatedAt:undefined}]});
+  assert.equal(backup[0].updatedAt, '');
+  const items = {[existing.id]:{data:existing, revision:0, deleted:false, dirty:false, modifiedAt:0}};
+  assert.deepEqual(mergeBackup(items, backup), {added:0, updated:0, skipped:1});
+  assert.equal(items[existing.id].data.updatedAt, existing.updatedAt);
+  items[existing.id].data = backup[0];
+  assert.deepEqual(mergeBackup(items, [existing]), {added:0, updated:1, skipped:0});
+});
+test('backup import compares records against the time of a local deletion',()=>{
+  const older = {...newHome(), updatedAt:'2026-11-17T00:00:00Z'};
+  const newer = {...older, updatedAt:'2026-11-19T00:00:00Z'};
+  const items = {[older.id]:{data:null, revision:5, deleted:true, dirty:false, modifiedAt:Date.parse('2026-11-18T00:00:00Z')}};
+  assert.deepEqual(mergeBackup(items, [older]), {added:0, updated:0, skipped:1});
+  assert.equal(items[older.id].deleted, true);
+  assert.deepEqual(mergeBackup(items, [newer], true), {added:0, updated:1, skipped:0});
+  assert.equal(items[older.id].deleted, false);
+  assert.equal(items[older.id].revision, 5);
 });
 test('user text is escaped before HTML rendering',()=>{
   assert.equal(escapeHTML('<img src=x onerror="x">'), '&lt;img src=x onerror=&quot;x&quot;&gt;');

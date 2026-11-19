@@ -1,6 +1,6 @@
 import { STAGES, CHECKS, LEGACY_CHECKS, RENT_TERMS, LABELS, COSTS, checkDescription } from './checklist.js';
 import { newHome, normalizeHome, getCheck, hardSummary, monthlyCost, propertyMonthlyCost, updateRentCosts, validateBackup, homeLabel, floorLabel, communityNames, noteHistory, escapeHTML as esc, uuid, isCommonPositive } from './model.js';
-import { reconcile, acknowledge } from './store.js';
+import { reconcile, acknowledge, restoreStoredItems, mergeBackup } from './store.js';
 import { backendHash, resolveConnection, viewFromHash } from './connection.js';
 
 const $ = selector => document.querySelector(selector);
@@ -39,20 +39,6 @@ for (const link of document.querySelectorAll('a[href^="#"]')) {
 const money = (value, options = {maximumFractionDigits: 2}) => value === null || value === undefined ? '待确认' : `¥${Number(value).toLocaleString('zh-CN', options)}`;
 const DECISIONS = {pending:'待考虑', shortlist:'意向房源', eliminated:'已排除', chosen:'已选定'};
 let items = {}, token = '', loadError = null, persistenceError = false, busy = false, lastSync = '', syncError = '';
-try {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    const stored = JSON.parse(raw);
-    if (stored.version !== 1 || !stored.items || Array.isArray(stored.items)) throw new Error('本机记录格式异常');
-    for (const [id, item] of Object.entries(stored.items)) {
-      if (typeof item.deleted !== 'boolean' || !Number.isInteger(item.revision) || item.revision < 0) throw new Error('本机记录格式异常');
-      const data = item.deleted ? null : normalizeHome(item.data);
-      if (data && data.id !== id) throw new Error('本机房源 ID 异常');
-      items[id] = {...item, data};
-    }
-  }
-  token = sessionStorage.getItem(TOKEN_KEY) || '';
-} catch (error) { loadError = error; }
 
 const state = {view:'guide', stage:1, filter:'all', search:'', sort:'updated', selected:new Set(), differencesOnly:false, demo:false, editing:null, editorTab:0};
 const app = $('#app');
@@ -92,10 +78,23 @@ function updateStatus() {
   if (saved) saved.textContent = persistenceError ? '保存失败，请导出备份' : label;
 }
 
+try {
+  token = sessionStorage.getItem(TOKEN_KEY) || '';
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    const restored = restoreStoredItems(JSON.parse(raw), !!ENDPOINT);
+    items = restored.items;
+    if (restored.repaired) persist();
+  }
+} catch (error) { loadError = error; }
+
 function changed(home) {
-  home.updatedAt = new Date().toISOString();
+  const now = Date.now();
+  const previous = Date.parse(home.updatedAt);
+  const next = previous >= now && previous < 8.64e15 ? previous + 1 : now;
+  home.updatedAt = new Date(next).toISOString();
   items[home.id].data = home;
-  items[home.id].modifiedAt = Date.now();
+  items[home.id].modifiedAt = Math.max(now, (items[home.id].modifiedAt || 0) + 1);
   items[home.id].dirty = !!ENDPOINT;
   persist();
   if (ENDPOINT && token) {
@@ -439,7 +438,9 @@ function askConfirm(title, text, action, {cancelLabel='取消', danger=true}={})
 async function deleteHome(id) {
   const home=items[id].data;
   if (!await askConfirm('删除这套房源？',`“${homeLabel(home)}”的记录将被删除，并在连接服务器后同步。建议先导出需要保留的记录。`,'删除房源')) return;
-  items[id].deleted=true;items[id].data=null;items[id].dirty=!!ENDPOINT;items[id].modifiedAt=Date.now();state.selected.delete(id);persist();editor.close();if(token)sync();toast('房源已删除');
+  const record = items[id];
+  record.modifiedAt = Math.max(Date.now(), (record.modifiedAt || 0) + 1, Date.parse(record.data?.updatedAt) || 0);
+  record.deleted=true;record.data=null;record.dirty=!!ENDPOINT;state.selected.delete(id);persist();editor.close();if(token)sync();toast('房源已删除');
 }
 function download(content, filename, type = 'application/json;charset=utf-8') {
   const url=URL.createObjectURL(new Blob([content],{type}));
@@ -488,7 +489,7 @@ function renderSettings() {
   settings.innerHTML=`<div class="dialog-header"><div><h2 id="settings-title">数据与同步</h2><p>保留自己的记录，也留一份备份。</p></div><button class="icon-button" id="close-settings" aria-label="关闭数据设置">×</button></div><div class="settings-body"><section class="settings-section"><h3>当前记录</h3><div class="sync-detail">${actualHomes().length} 套房源 · ${ENDPOINT?'本机草稿＋服务器同步':'保存在当前设备的浏览器'}${lastSync?`<br>最近同步 ${lastSync}`:''}</div><p class="small-note">${ENDPOINT?'离线修改会先保存在本机，重新联网并登录后再同步。':'清除网站数据或更换浏览器不会保留本机记录，请定期导出备份。'}</p></section>
   ${ENDPOINT?`<section class="settings-section"><h3>连接的服务器</h3><p class="connection-address">${esc(ENDPOINT)}</p>${LINK_ENDPOINT?'<p class="small-note">返回本地模式后，这里的草稿仍会保留；再次使用同一服务器链接即可继续。</p><button class="button" id="use-local">返回本地模式</button>':''}</section>`:''}
   ${ENDPOINT?`<section class="settings-section"><h3>跨设备同步</h3>${token?`<p>${syncError?esc(syncError):'已登录。其他设备登录同一服务器后，可查看和修改这些房源。'}</p><div class="settings-actions"><button class="button primary" id="sync-now">立即同步</button><button class="button" id="logout">退出登录</button></div>`:`<p>输入部署时设置的个人密码。未登录期间的记录会先保存在本机。</p><form id="login-form"><label class="form-field"><span>个人登录密码</span><input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></label><div class="settings-actions"><button class="button primary" type="submit" id="login-submit">登录并同步</button></div><p id="login-error" class="inline-error" role="alert"></p></form>`}</section>`:''}
-  <section class="settings-section"><h3>导出与恢复</h3><p>导出文件包含房源指标、费用和备注，不包含登录凭据。导入时保留已有记录；相同ID内容不同的房源会作为副本添加。</p><p class="small-note" id="backup-share-hint" role="status">${BACKUP_SHARE_HINT}</p><div class="settings-actions"><button class="button primary" id="share-backup" aria-describedby="backup-share-hint">分享备份</button><button class="button" id="download-txt" aria-describedby="backup-share-hint">下载 .txt 备份</button><button class="button" id="export">↓ 导出备份</button><button class="button" id="import">↑ 导入备份</button></div></section></div>`;
+  <section class="settings-section"><h3>导出与恢复</h3><p>备份包含房源指标、费用和备注。导入时，房源 ID 相同且更新的版本会替换现有记录。</p><p class="small-note" id="backup-share-hint" role="status">${BACKUP_SHARE_HINT}</p><div class="settings-actions"><button class="button primary" id="share-backup" aria-describedby="backup-share-hint">分享备份</button><button class="button" id="download-txt" aria-describedby="backup-share-hint">下载 .txt 备份</button><button class="button" id="export">↓ 导出备份</button><button class="button" id="import">↑ 导入备份</button></div><p id="backup-import-result" role="status"></p></section></div>`;
   $('#share-backup').onclick=shareHomes;
   $('#download-txt').onclick=()=>exportHomes('txt');
   $('#close-settings').onclick=()=>settings.close();$('#export').onclick=()=>exportHomes();$('#import').onclick=()=>$('#import-file').click();
@@ -506,17 +507,15 @@ settings.addEventListener('close',render);
 $('#import-file').onchange=async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
   try {
+    if(loadError)throw new Error('本机记录暂时无法读取，请先下载原始记录');
     if(file.size>10*1024*1024)throw new Error('备份文件过大，请选择10MB以内的备份文件');
     const homes=validateBackup(JSON.parse(await file.text()));
-    if(!await askConfirm('导入房源备份？',`将检查并添加 ${homes.length} 套房源。已有记录不会被覆盖。`,'导入记录'))return;
-    let added=0;
-    for(const home of homes){
-      const existing=items[home.id];
-      if(existing&&!existing.deleted&&JSON.stringify(existing.data)===JSON.stringify(home))continue;
-      if(existing){home.id=uuid();home.name=`${homeLabel(home)}（导入副本）`;}
-      items[home.id]={data:home,revision:0,deleted:false,dirty:!!ENDPOINT,modifiedAt:Date.now()};added++;
-    }
-    state.demo=false;persist();renderSettings();render();if(token)sync();toast(`已添加 ${added} 套房源`);
+    if(!await askConfirm('导入房源备份？',`将检查 ${homes.length} 套房源。房源 ID 相同且更新的版本会覆盖现有记录，旧版本或更新时间相同的版本会跳过。`,'导入记录'))return;
+    const {added, updated, skipped} = mergeBackup(items, homes, !!ENDPOINT);
+    state.demo=false;if(added || updated)persist();renderSettings();render();if(token)sync();
+    const message = `导入完成，新增 ${added} 套，更新 ${updated} 套，跳过 ${skipped} 套`;
+    if (settings.open) $('#backup-import-result').textContent = message;
+    else toast(message);
   }catch(error){toast(error.message||'无法读取备份文件',true);}
 };
 

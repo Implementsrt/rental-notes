@@ -1,5 +1,6 @@
 import { CHECKS, LEGACY_CHECKS, DEFAULT_COMMUNITIES, RENT_TERMS, LABELS, COSTS } from './checklist.js';
 export const uuid = () => crypto.randomUUID();
+export const isHomeId = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 export const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function newHome() {
   return {id: uuid(), community: DEFAULT_COMMUNITIES[0], layout: '三房', bathrooms: '两卫', name: '', address: '', link: '', contact: '', area: '', floor: '', visitDate: '', decision: 'pending', notes: '', propertyFeeBasis: 'area', depositMonths: 1, paymentMonths: 1, agencyRate: 0.5, costs: {...Object.fromEntries(COSTS.map(c => [c.id, null])), parking: 300, cleanOut: 200}, checks: {}, updatedAt: new Date().toISOString()};
@@ -7,7 +8,7 @@ export function newHome() {
 export function normalizeHome(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('房源格式不正确');
   const home = newHome();
-  if (typeof raw.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw.id)) home.id = raw.id;
+  if (isHomeId(raw.id)) home.id = raw.id;
   for (const key of ['community','layout','bathrooms','name','address','link','contact','area','floor','visitDate','notes']) home[key] = String(raw[key] ?? '').slice(0, key === 'notes' ? 10000 : 2000);
   // Older records contain a monthly amount, never reinterpret it as a rate.
   home.propertyFeeBasis = raw.propertyFeeBasis ?? 'monthly';
@@ -29,7 +30,7 @@ export function normalizeHome(raw) {
     if (v && Object.hasOwn(LABELS[c.kind], v.status)) home.checks[c.id] = {status: v.status, note: String(v.note ?? '').slice(0, 3000)};
   }
   updateRentCosts(home);
-  if (typeof raw.updatedAt === 'string' && !isNaN(Date.parse(raw.updatedAt))) home.updatedAt = raw.updatedAt;
+  home.updatedAt = typeof raw.updatedAt === 'string' && Number.isFinite(Date.parse(raw.updatedAt)) ? raw.updatedAt : '';
   return home;
 }
 export const getCheck = (home, id) => home.checks[id] || {status: 'unknown', note: ''};
