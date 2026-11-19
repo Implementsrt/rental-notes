@@ -441,8 +441,8 @@ async function deleteHome(id) {
   if (!await askConfirm('删除这套房源？',`“${homeLabel(home)}”的记录将被删除，并在连接服务器后同步。建议先导出需要保留的记录。`,'删除房源')) return;
   items[id].deleted=true;items[id].data=null;items[id].dirty=!!ENDPOINT;items[id].modifiedAt=Date.now();state.selected.delete(id);persist();editor.close();if(token)sync();toast('房源已删除');
 }
-function download(content, filename) {
-  const url=URL.createObjectURL(new Blob([content],{type:'application/json;charset=utf-8'}));
+function download(content, filename, type = 'application/json;charset=utf-8') {
+  const url=URL.createObjectURL(new Blob([content],{type}));
   const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function buildBackup() {
@@ -454,12 +454,17 @@ function buildBackup() {
     count: homes.length,
   };
 }
-function exportHomes() {
+function exportHomes(format = 'json') {
   const {content, filename, count} = buildBackup();
-  download(content, `${filename}.json`);
-  toast(`已导出 ${count} 套房源`);
+  if (format === 'txt') {
+    download(content, `${filename}.txt`, 'text/plain;charset=utf-8');
+    $('#backup-share-hint').textContent = `下载后，在微信聊天里点「＋」→「文件」，从手机的下载目录选择 ${filename}.txt。也可以在手机的文件管理中长按备份，点「分享」。`;
+  } else {
+    download(content, `${filename}.json`);
+    toast(`已导出 ${count} 套房源`);
+  }
 }
-const BACKUP_SHARE_HINT = '在系统分享面板选择微信。若面板里没有微信，可先导出备份，再从微信发送。';
+const BACKUP_SHARE_HINT = '系统分享面板里选不到微信时，可下载 .txt 备份，再从微信聊天里发送文件。';
 async function shareHomes(event) {
   const button = event.currentTarget;
   const hint = $('#backup-share-hint');
@@ -467,14 +472,14 @@ async function shareHomes(event) {
   try {
     const {content, filename} = buildBackup();
     const shareData = {files: [new File([content], `${filename}.txt`, {type:'text/plain'})]};
-    if (typeof navigator.share !== 'function' || !navigator.canShare?.(shareData)) {
-      hint.textContent = '当前浏览器无法直接分享文件。请先导出备份，再从微信发送。';
+    if (typeof navigator.share !== 'function' || navigator.canShare?.(shareData) === false) {
+      hint.textContent = '当前浏览器无法直接分享文件。请点「下载 .txt 备份」，再从微信聊天里发送文件。';
       return;
     }
     button.disabled = true;
     await navigator.share(shareData);
   } catch (error) {
-    if (error.name !== 'AbortError') hint.textContent = '打开分享面板失败。可重试，或导出备份后从微信发送。';
+    if (error.name !== 'AbortError') hint.textContent = '打开分享面板失败。请点「下载 .txt 备份」，再从微信聊天里发送文件。';
   } finally {
     button.disabled = false;
   }
@@ -483,9 +488,10 @@ function renderSettings() {
   settings.innerHTML=`<div class="dialog-header"><div><h2 id="settings-title">数据与同步</h2><p>保留自己的记录，也留一份备份。</p></div><button class="icon-button" id="close-settings" aria-label="关闭数据设置">×</button></div><div class="settings-body"><section class="settings-section"><h3>当前记录</h3><div class="sync-detail">${actualHomes().length} 套房源 · ${ENDPOINT?'本机草稿＋服务器同步':'保存在当前设备的浏览器'}${lastSync?`<br>最近同步 ${lastSync}`:''}</div><p class="small-note">${ENDPOINT?'离线修改会先保存在本机，重新联网并登录后再同步。':'清除网站数据或更换浏览器不会保留本机记录，请定期导出备份。'}</p></section>
   ${ENDPOINT?`<section class="settings-section"><h3>连接的服务器</h3><p class="connection-address">${esc(ENDPOINT)}</p>${LINK_ENDPOINT?'<p class="small-note">返回本地模式后，这里的草稿仍会保留；再次使用同一服务器链接即可继续。</p><button class="button" id="use-local">返回本地模式</button>':''}</section>`:''}
   ${ENDPOINT?`<section class="settings-section"><h3>跨设备同步</h3>${token?`<p>${syncError?esc(syncError):'已登录。其他设备登录同一服务器后，可查看和修改这些房源。'}</p><div class="settings-actions"><button class="button primary" id="sync-now">立即同步</button><button class="button" id="logout">退出登录</button></div>`:`<p>输入部署时设置的个人密码。未登录期间的记录会先保存在本机。</p><form id="login-form"><label class="form-field"><span>个人登录密码</span><input id="login-password" type="password" autocomplete="current-password" required maxlength="1024"></label><div class="settings-actions"><button class="button primary" type="submit" id="login-submit">登录并同步</button></div><p id="login-error" class="inline-error" role="alert"></p></form>`}</section>`:''}
-  <section class="settings-section"><h3>导出与恢复</h3><p>导出文件包含房源指标、费用和备注，不包含登录凭据。导入时保留已有记录；相同ID内容不同的房源会作为副本添加。</p><p class="small-note" id="backup-share-hint" role="status">${BACKUP_SHARE_HINT}</p><div class="settings-actions"><button class="button primary" id="share-backup" aria-describedby="backup-share-hint">分享备份</button><button class="button" id="export">↓ 导出备份</button><button class="button" id="import">↑ 导入备份</button></div></section></div>`;
+  <section class="settings-section"><h3>导出与恢复</h3><p>导出文件包含房源指标、费用和备注，不包含登录凭据。导入时保留已有记录；相同ID内容不同的房源会作为副本添加。</p><p class="small-note" id="backup-share-hint" role="status">${BACKUP_SHARE_HINT}</p><div class="settings-actions"><button class="button primary" id="share-backup" aria-describedby="backup-share-hint">分享备份</button><button class="button" id="download-txt" aria-describedby="backup-share-hint">下载 .txt 备份</button><button class="button" id="export">↓ 导出备份</button><button class="button" id="import">↑ 导入备份</button></div></section></div>`;
   $('#share-backup').onclick=shareHomes;
-  $('#close-settings').onclick=()=>settings.close();$('#export').onclick=exportHomes;$('#import').onclick=()=>$('#import-file').click();
+  $('#download-txt').onclick=()=>exportHomes('txt');
+  $('#close-settings').onclick=()=>settings.close();$('#export').onclick=()=>exportHomes();$('#import').onclick=()=>$('#import-file').click();
   if($('#use-local')) $('#use-local').onclick=async()=>{if(await askConfirm('返回本地模式？','当前服务器草稿会保留。返回后将显示此前的纯本地记录；需要迁移请先导出 JSON 备份。','返回本地模式',{danger:false})){clearBackendLink();location.reload();}};
   if($('#login-form')) $('#login-form').onsubmit=async event=>{
     event.preventDefault();const password=$('#login-password').value;$('#login-submit').disabled=true;$('#login-error').textContent='';
