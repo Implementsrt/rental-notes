@@ -7,10 +7,10 @@ import { backendHash, resolveConnection, viewFromHash } from '../web/connection.
 
 test('unknown checks do not become failures',()=>{
   const home=newHome();
-  assert.deepEqual(hardSummary(home),{total:18,pass:0,fail:0,unknown:18,other:0});
+  assert.deepEqual(hardSummary(home),{total:22,pass:0,fail:0,unknown:22,other:0});
   home.checks.balcony={status:'fail',note:''};
   assert.equal(hardSummary(home).fail,1);
-  assert.equal(hardSummary(home).unknown,17);
+  assert.equal(hardSummary(home).unknown,21);
 });
 test('other answers retain notes and do not count as passing or failing hard requirements',()=>{
   const home=newHome();home.community='花园小区';
@@ -19,7 +19,7 @@ test('other answers retain notes and do not count as passing or failing hard req
   const restored=validateBackup({format:'rental-notes',version:1,homes:[home]})[0];
   assert.equal(restored.community,'花园小区');
   for(const id of ids)assert.deepEqual(getCheck(restored,id),{status:'other',note:'待进一步协商'});
-  assert.deepEqual(hardSummary(restored),{total:18,pass:0,fail:0,unknown:16,other:2});
+  assert.deepEqual(hardSummary(restored),{total:22,pass:0,fail:0,unknown:20,other:2});
 });
 test('community selection deduplicates names while separate units and legacy titles remain identifiable',()=>{
   const first=newHome();first.community=' 花园小区 ';first.name='3栋1203';
@@ -87,7 +87,31 @@ test('on-site inspection covers every online prompt and keeps the same check IDs
   const online=CHECKS.filter(c=>c.stages.includes(1)),onsite=CHECKS.filter(c=>c.stages.includes(2));
   assert.ok(online.length>0);
   for(const check of online){assert.ok(onsite.some(c=>c.id===check.id));assert.ok(checkDescription(check,1));assert.equal(checkDescription(check,2),check.how);}
-  assert.equal(onsite.length,38);
+  assert.equal(onsite.length,45);
+});
+
+test('new furnishings and building checks preserve legacy answers and round-trip their own results',()=>{
+  const hardIds = ['dining_table_sofa', 'main_bed_width', 'toilet_size', 'elevator_households'];
+  const softIds = ['television', 'bed_count', 'main_curtain_blackout'];
+  const legacy = newHome();
+  legacy.checks.furniture = {status: 'pass', note: '已有家具记录'};
+  legacy.checks.toilet = {status: 'pass', note: '冲水正常'};
+  const restored = normalizeHome(legacy);
+
+  for (const [ids, kind, stages] of [[hardIds, 'hard', [1, 2]], [softIds, 'soft', [2]]]) {
+    for (const id of ids) {
+      const check = CHECKS.find(check => check.id === id);
+      assert.equal(check?.kind, kind, id);
+      assert.deepEqual(check.stages, stages, id);
+      assert.deepEqual(getCheck(restored, id), {status: 'unknown', note: ''}, id);
+    }
+  }
+
+  restored.checks.toilet_size = {status: 'fail', note: ''};
+  restored.checks.bed_count = {status: 'other', note: '共两张床'};
+  const imported = validateBackup({format: 'rental-notes', version: 1, homes: [restored]})[0];
+  assert.deepEqual(imported.checks, restored.checks);
+  assert.deepEqual(hardSummary(imported), {total: 22, pass: 2, fail: 1, unknown: 19, other: 0});
 });
 
 test('difference mode hides only unanimous positive answers for two to four homes',()=>{
@@ -239,7 +263,7 @@ test('legacy custom amounts, decimals, removed cleaning field and combined appli
   const restored=validateBackup({format:'rental-notes',version:1,homes:[home]})[0];
   assert.deepEqual(restored.checks.appliances,legacy.checks.appliances);
   for(const id of ['fridge','sterilizer','range_hood','gas_water_heater'])assert.deepEqual(getCheck(restored,id),{status:'unknown',note:''});
-  assert.equal(hardSummary(restored).pass,0);assert.equal(hardSummary(restored).unknown,18);
+  assert.equal(hardSummary(restored).pass,0);assert.equal(hardSummary(restored).unknown,22);
 });
 
 test('new appliance answers are independent and survive imports without inferring unknown results',()=>{
